@@ -1,0 +1,9 @@
+Gtk/DecorationLayout "menu:minimize,maximize,close"
+Gtk/FontName "DejaVu Sans 10"
+Net/DoubleClickTime 400
+Net/IconThemeName "Moka"
+Net/ThemeName "Adwaita"
+Xft/Hinting 1
+Xft/RGBA "rgb"
+Xft/HintStyle "hintslight"
+Xft/Antialias 1

@@ -1,0 +1,6 @@
+include "%L"
+include "%H/.compose/typography.xcompose"
+include "%H/.compose/operators.xcompose"
+include "%H/.compose/sinfsext.xcompose"
+include "%H/.compose/greek.xcompose"
+include "%H/.compose/misc.xcompose"

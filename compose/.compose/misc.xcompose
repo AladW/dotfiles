@@ -1,0 +1,91 @@
+#<- Miscellaneous ->
+<Multi_key> <asterisk> <period>                 : "•"   U2022   # Bullet
+<Multi_key> <asterisk> <minus>                  : "⁃"   U2043   # Hypen Bullet
+<Multi_key> <minus> <bar>                       : "†"   U2020   # Dagger
+<Multi_key> <bar> <minus> <minus>               : "‡"   U2021   # Double Dagger
+<Multi_key> <asterisk> <asterisk> <asterisk>    : "⁂"   U2042   # Asterism
+<Multi_key> <asciicircum> <asciicircum>         : "‸"   U2038   # Caret
+<Multi_key> <o> <o>                             : "°"   U00B0   # Degree
+<Multi_key> <quotedbl> <quotedbl>               : "〃"  U3003   # Ditto
+<Multi_key> <n> <u> <m>                         : "№"   U2116   # Numero
+<Multi_key> <a> <t> <h>                         : "ª"   U00AA   # Feminine Ordinal
+<Multi_key> <o> <t> <h>                         : "º"   U00BA   # Masculine Ordinal
+<Multi_key> <underscore> <space>                : "␣"   U2423   # Open box
+<Multi_key> <bracketleft> <O>                   : "⎄"   U2384   # Composition Symbol
+
+<Multi_key> <percent> <o>                       : "‰"   U2030   # Permille
+<Multi_key> <percent> <percent>                 : "‱"   U2031   # Basis Point
+
+<Multi_key> <P> <P>                             : "¶"   U00B6   # Pilcrow
+<Multi_key> <s> <e> <c>                         : "§"   U00A7   # Section
+
+<Multi_key> <o> <c>                             : "©"   U00A9   # Copyright
+<Multi_key> <t> <m>                             : "™"   U2122   # Trade Mark
+
+<Multi_key> <equal> <equal> <greater>           : "⇒"   U21D2   # Right Double Arrow
+<Multi_key> <equal> <equal> <less>              : "⇐"   U21D0   # Left Double Arrow
+
+<Multi_key> <t> <r> <i>                         : "▲"   U25B2   # Up-Pointing Black Triangle
+<Multi_key> <i> <r> <t>                         : "▼"   U25BC   # Down-Pointing Black Triangle
+
+<Multi_key> <less> <3>                          : "❤"   U2764   # Black Heart
+<Multi_key> <asterisk> <s> <t>                  : "★"   U2605   # Black Star
+<Multi_key> <p> <e> <a> <c> <e>                 : "☮"   U262E   # Peace Sign
+<Multi_key> <i> <n> <f>                         : "∞"   U221E   # Infinity Symbol
+
+<Multi_key> <h> <r> <t>                         : "♡"   U2661   # White Heart Suit
+<Multi_key> <c> <l> <b>                         : "♣"   U2663   # Black Club Suit
+<Multi_key> <d> <m> <n> <d>                     : "♢"   U2662   # White Diamond Suit
+<Multi_key> <s> <p> <d>                         : "♠"   U2660   # Black Spade Suit
+<Multi_key> <m> <e> <r>                         : "☿"   U263F   # Mercury Symbol
+
+<Multi_key> <y> <e> <s>                         : "✔"           # Checkmark / Yes
+<Multi_key> <n> <o> <m>                         : "✘"           # X / No
+
+#<- Modifier keys ->
+<Multi_key> <a> <l> <t>                         : "⌥"   U2325   # Alternate
+<Multi_key> <s> <h> <f> <t>                     : "⇧"   U21E7   # Shift
+<Multi_key> <t> <a> <b>                         : "⭾"   U2B7E   # Tab
+
+#<- Currency ->
+<Multi_key> <e> <u> <r>                         : "€"   U20AC   # Euro
+<Multi_key> <g> <b> <p>                         : "£"   U00A3   # British Pound Sterling
+
+#<- Musical ->
+<Multi_key> <m> <s> <h> <r> <p>                 : "♯"   U266F   # Sharp
+<Multi_key> <m> <f> <l> <a> <t>                 : "♭"   U266D   # Flat
+
+#<- Smileys ->
+<Multi_key> <colon> <parenleft>                 : "☹"   U2639   # :(
+<Multi_key> <colon> <parenright>                : "☺"   U263A   # :)
+<Multi_key> <s> <n> <o> <w>                     : "☃"   U2603   # Snowman
+<Multi_key> <s> <i> <g> <h>                     : "-_-"
+<Multi_key> <p> <n> <d> <a>                     : "ʕ·ᴥ·ʔ"
+<Multi_key> <k> <l> <a>                         : "ʔ·ᴥ·ʕ"
+<Multi_key> <s> <t> <p>                         : "•_•"
+<Multi_key> <s> <t> <a> <p>                     : "ಠ_ಠ"
+<Multi_key> <s> <h> <r> <g>                     : "¯\\o/¯"
+<Multi_key> <p> <s> <h> <r> <g>                 : "¯\\ʕ·ᴥ·ʔ/¯"
+<Multi_key> <p> <f> <a> <c> <e>                 : "🐼"
+<Multi_key> <h> <o> <r> <s> <e>                 : "🐎"   U1F40E
+<Multi_key> <b> <u> <n> <y>                     : "🐇"   U1F407
+<Multi_key> <d> <r> <a> <g> <o> <n>             : "🐉"   U1F409
+<Multi_key> <k> <o> <a> <l> <a>                 : "🐨"   U1F428
+<Multi_key> <colon> <D>                         : "😀"   U1F600  # :D
+<Multi_key> <D> <colon>                         : "😦"   U1F626  # D:
+<Multi_key> <c> <t> <l>                         : "🎮"   U1F3AE
+<Multi_key> <t> <a> <c> <o>                     : "🌮"   U1F32E
+<Multi_key> <r> <e> <c> <y> <c> <l> <e>         : "♲"    U2672
+<Multi_key> <t> <r> <a> <s> <h>                 : "🗑"    U1F5D1
+<Multi_key> <l> <o> <c> <k>                     : "🔒"   U1F512
+<Multi_key> <g> <h> <o> <s> <t>                 : "👻"   U1F47B
+<Multi_key> <s> <h> <r> <u> <g>                 : "🤷"
+
+<Multi_key> <plus> <1>                          : "👍"   U1F44D
+<Multi_key> <minus> <1>                         : "👎"   U1F44E
+
+#<- ASCII Delimiters ->
+<Multi_key> <Multi_key> <space>                 : ""          # Unit Sep
+<Multi_key> <Multi_key> <Return>                : ""          # Record Sep
+<Multi_key> <Multi_key> <Tab>                   : ""          # Group Sep
+<Multi_key> <Multi_key> <End>                   : ""          # File Sep

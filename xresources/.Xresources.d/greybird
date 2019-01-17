@@ -1,0 +1,33 @@
+! Background
+
+Rxvt*foreground:    #b7b7b7
+Rxvt*background:    #131926
+Rxvt*cursorColor:   #0f4999
+
+XTerm*foreground:   #b7b7b7
+XTerm*background:   #131926
+XTerm*cursorColor:  #0f4999
+
+! Normal colors
+
+*color0:            #000000
+*color1:            #aa0000
+*color2:            #44aa44
+*color3:            #aa5500
+*color4:            #0039aa
+*color5:            #aa22aa
+*color6:            #1a92aa
+*color7:            #aaaaaa
+
+! Bright colors
+
+*color8:            #777777
+*color9:            #ff8787
+*color10:           #4ce64c
+*color11:           #ded82c
+*color12:           #295fcc
+*color13:           #cc58cc
+*color14:           #4ccce6
+*color15:           #ffffff
+
+! vim: set syn=xdefaults:

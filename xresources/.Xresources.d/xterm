@@ -1,0 +1,24 @@
+! Application Resources
+
+XTerm.fullscreen:	never
+XTerm.termName:		xterm-256color
+
+! VT100 Widget Resources
+
+XTerm.vt100.allowScrollLock:      true
+XTerm.vt100.alternateScroll:      true
+XTerm.vt100.bellIsUrgent:         true
+XTerm.vt100.borderWidth:          0
+XTerm.vt100.charClass:            33:48,37-38:48,45-47:48,64:48,58:48,126:48,61:48,63:48,43:48,35:48
+XTerm.vt100.disallowedWindowOps:  20,21,SetXprop
+XTerm.vt100.faceName:             DejaVu Sans Mono
+XTerm.vt100.faceNameDoublesize:   WenQuanYi Zen Hei Mono
+XTerm.vt100.faceSize:             10
+XTerm.vt100.highlightSelection:   true
+XTerm.vt100.metaSendsEscape:      true
+
+XTerm.vt100.translations:   #override\n \
+                            Shift Ctrl <KeyPress> v:insert-selection(CLIPBOARD)\n \
+                            Shift Ctrl <KeyPress> c:select-set(CLIPBOARD)
+
+! vim: set syn=xdefaults:
