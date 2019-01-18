@@ -30,30 +30,39 @@ if [ -d /etc/X11/xinit/xinitrc.d ] ; then
 fi
 
 # input method
-export GTK_IM_MODULE=xim
-export XMODIFIERS=@im=xim
-export QT_IM_MODULE=xim
+# export GTK_IM_MODULE=xim
+# export XMODIFIERS=@im=xim
+# export QT_IM_MODULE=xim
 
 # gtk3
 export NO_AT_BRIDGE=1
 export GTK_OVERLAY_SCROLLING=0
 
 # qt5
-if [ -f /usr/lib/qt/plugins/platformthemes/libqgtk2.so ]; then
-    export QT_QPA_PLATFORMTHEME=gtk2
-elif [ -f usr/lib/qt/plugins/platformthemes/libqt5ct.so ]; then
-    export QT_QPA_PLATOFRMTHEME=qt5ct
-fi
+# if [ -f /usr/lib/qt/plugins/platformthemes/libqgtk2.so ]; then
+#     export QT_QPA_PLATFORMTHEME=gtk2
+# elif [ -f usr/lib/qt/plugins/platformthemes/libqt5ct.so ]; then
+#     export QT_QPA_PLATOFRMTHEME=qt5ct
+# fi
 
 # run desktop files
 dex --autostart --environment XFCE &
+
+# mouse settings
+xfconf-query --channel xsettings --property /Gtk/CursorThemeSize --set 16
+xfconf-query --channel xsettings --property /Gtk/CursorThemeName --set Adwaita
+
 # keyboard settings
-setxkbmap -layout gb -variant intl
+setxkbmap -layout gb -variant extd
+
 # acpi events
 uacpid --opendisplay &
+
 # compositing manager
 compton --no-fading-openclose &
+
 # wallpaper
-"$HOME"/.fehbg &
+hsetroot -solid '#000000'
+
 # window manager
 exec i3
