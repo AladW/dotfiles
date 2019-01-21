@@ -29,6 +29,11 @@ if [ -d /etc/X11/xinit/xinitrc.d ] ; then
     unset f
 fi
 
+# launches a session dbus instance
+if [ -z "${DBUS_SESSION_BUS_ADDRESS-}" ] && type dbus-launch >/dev/null; then
+    eval $(dbus-launch --sh-syntax --exit-with-session)
+fi
+
 # input method
 # export GTK_IM_MODULE=xim
 # export XMODIFIERS=@im=xim
@@ -51,18 +56,6 @@ dex --autostart --environment XFCE &
 # mouse settings
 xfconf-query --channel xsettings --property /Gtk/CursorThemeSize --set 16
 xfconf-query --channel xsettings --property /Gtk/CursorThemeName --set Adwaita
-
-# keyboard settings
-setxkbmap -layout gb -variant extd
-
-# acpi events
-uacpid --opendisplay &
-
-# compositing manager
-compton --no-fading-openclose &
-
-# wallpaper
-hsetroot -solid '#000000'
 
 # window manager
 exec i3
