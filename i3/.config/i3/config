@@ -190,9 +190,8 @@ bindsym $mod+Pause mode "$mode_system"
 # Start i3bar to display a workspace bar (plus the system information i3status
 # finds out, if available)
 bar {
-    output primary
-    position top
     status_command i3status
+    tray_output primary
     tray_padding 0
 
     colors {
@@ -258,8 +257,7 @@ client.unfocused        #373737 #222222 #bbbbbb #3B3B3B
 client.urgent           #7E1919 #700000 #eeeeee #8A0000
 
 # autostart
-exec --no-startup-id compton --no-fading-openclose
-exec --no-startup-id uacpid  --opendisplay
+exec --no-startup-id compton
 
 # $i3-background
 exec_always --no-startup-id hsetroot -solid '#005577'

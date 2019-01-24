@@ -1,10 +1,7 @@
 # -*- mode: conf-space; -*-
-EDITOR          DEFAULT=vim
-VISUAL          DEFAULT=vim
 LESSHISTFILE    DEFAULT=/dev/null
 MC_KEYMAP	    DEFAULT=mc.emacs.keymap
 QUOTING_STYLE   DEFAULT=literal
-
 XDG_CONFIG_HOME DEFAULT=@{HOME}/.config
 XDG_CACHE_HOME  DEFAULT=@{HOME}/.cache
 XDG_DATA_HOME   DEFAULT=@{HOME}/.local/share

@@ -1,0 +1,3 @@
+#!/bin/sh
+pacman --config /etc/pacman.d/archive-2019-01-08.conf "$@"
+#pacman --config /etc/pacman.d/archive-2018-12-04.conf "$@"

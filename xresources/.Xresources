@@ -2,6 +2,3 @@
 #include ".Xresources.d/rxvt-unicode"
 #include ".Xresources.d/xterm"
 #include ".Xresources.d/xscreensaver"
-
-#Xcursor.theme:	Adwaita
-#Xcursor.size:	16

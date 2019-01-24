@@ -16,12 +16,17 @@ PS1='[\u@\h \W]\$ '
 eval "$(keychain --quiet --quick --eval)"
 
 # fuzzy matching
-. /usr/share/fzf/key-bindings.bash
-. /usr/share/fzf/completion.bash
+source /usr/share/fzf/key-bindings.bash
+source /usr/share/fzf/completion.bash
 
 # avoid losing shell history
 HISTFILESIZE=400000000
 HISTSIZE=10000
 PROMPT_COMMAND="history -a"
-
 shopt -s histappend
+
+# shell-specific environment variables
+export AUR_REPO=alad
+export AUR_DBROOT=/var/cache/pacman/custom/alad
+export EDITOR=vim
+export VISUAL=vim
