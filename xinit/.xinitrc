@@ -1,24 +1,9 @@
 #!/bin/sh
 userresources=$HOME/.Xresources
-usermodmap=$HOME/.Xmodmap
-sysresources=/etc/X11/xinit/.Xresources
-sysmodmap=/etc/X11/xinit/.Xmodmap
 
 # merge in defaults and keymaps
-if [ -f $sysresources ]; then
-    xrdb -merge $sysresources
-fi
-
-if [ -f $sysmodmap ]; then
-    xmodmap $sysmodmap
-fi
-
 if [ -f "$userresources" ]; then
     xrdb -merge "$userresources"
-fi
-
-if [ -f "$usermodmap" ]; then
-    xmodmap "$usermodmap"
 fi
 
 # start some nice programs
@@ -34,28 +19,33 @@ if [ -z "${DBUS_SESSION_BUS_ADDRESS-}" ] && type dbus-launch >/dev/null; then
     eval $(dbus-launch --sh-syntax --exit-with-session)
 fi
 
-# input method
-# export GTK_IM_MODULE=xim
-# export XMODIFIERS=@im=xim
-# export QT_IM_MODULE=xim
-
-# gtk3
+# environment variables
+export COLORTERM=truecolor
 export NO_AT_BRIDGE=1
 export GTK_OVERLAY_SCROLLING=0
 
-# qt5
-# if [ -f /usr/lib/qt/plugins/platformthemes/libqgtk2.so ]; then
-#     export QT_QPA_PLATFORMTHEME=gtk2
-# elif [ -f usr/lib/qt/plugins/platformthemes/libqt5ct.so ]; then
-#     export QT_QPA_PLATOFRMTHEME=qt5ct
-# fi
+# environment variables (qt5)
+#if [ -f /usr/lib/qt/plugins/platformthemes/libqgtk2.so ]; then
+#    export QT_QPA_PLATFORMTHEME=gtk2
+#elif [ -f usr/lib/qt/plugins/platformthemes/libqt5ct.so ]; then
+#    export QT_QPA_PLATOFRMTHEME=qt5ct
+#fi
 
 # run desktop files
 dex --autostart --environment XFCE &
 
 # mouse settings
-xfconf-query --channel xsettings --property /Gtk/CursorThemeSize --set 16
-xfconf-query --channel xsettings --property /Gtk/CursorThemeName --set Adwaita
+xfconf-query -c xsettings -p /Gtk/CursorThemeSize -s 16
+xfconf-query -c xsettings -p /Gtk/CursorThemeName -s Adwaita
+
+# keyboard settings
+xfconf-query -c keyboard-layout -p /Default/XkbLayout -s gb
+xfconf-query -c keyboard-layout -p /Default/XkbVariant -s extd
+
+# acpi events
+if ! pgrep -u $UID uacpid; then
+    uacpid --opendisplay &
+fi
 
 # window manager
 exec i3
