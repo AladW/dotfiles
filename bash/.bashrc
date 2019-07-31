@@ -26,7 +26,5 @@ PROMPT_COMMAND="history -a"
 shopt -s histappend
 
 # shell-specific environment variables
-export AUR_REPO=alad
-export AUR_DBROOT=/var/cache/pacman/custom/alad
 export EDITOR=vim
 export VISUAL=vim

@@ -30,7 +30,7 @@ font pango:monospace 10
 floating_modifier $mod
 
 # start a terminal
-bindsym $mod+Return exec TERMINAL=termite i3-sensible-terminal
+bindsym $mod+Return exec i3-sensible-terminal
 
 # kill focused window
 bindsym $mod+Shift+q kill
@@ -190,8 +190,8 @@ bindsym $mod+Pause mode "$mode_system"
 # Start i3bar to display a workspace bar (plus the system information i3status
 # finds out, if available)
 bar {
+    font pango:DejaVu Sans Mono 11
     status_command i3status
-    tray_output primary
     tray_padding 0
 
     colors {
@@ -220,6 +220,10 @@ for_window [class="Anki"] floating enable
 for_window [class="Galculator"] floating enable
 for_window [class="Connman-gtk"] floating enable
 for_window [class="Pybgsetter"] floating enable
+for_window [class="Asoundconf-gtk"] floating enable
+for_window [class="Thunderbird" instance="Msgcompose"] floating enable
+for_window [class="Viewnior"] floating enable
+for_window [class="Blueman-manager"] floating enable
 for_window [window_role="News-BlogSubscriptions"] floating enable
 for_window [window_role="(?i)filterlist"] floating enable
 for_window [window_role="(?i)manager"] floating enable
@@ -246,18 +250,18 @@ bindsym $mod+Shift+minus move scratchpad
 bindsym $mod+minus scratchpad show
 
 # acpi handler
-bindsym XF86AudioLowerVolume exec --no-startup-id pkill -USR1 i3status
-bindsym XF86AudioRaiseVolume exec --no-startup-id pkill -USR1 i3status
-bindsym XF86AudioMute exec --no-startup-id pkill -USR1 i3status
+bindsym XF86AudioLowerVolume exec --no-startup-id amixer sset Master 5%- \
+	&& pkill -USR1 i3status
+bindsym XF86AudioRaiseVolume exec --no-startup-id amixer sset Master 5%+ \
+	&& pkill -USR1 i3status
+bindsym XF86AudioMute exec --no-startup-id amixer sset Master toggle \
+	&& pkill -USR1 i3status
 
 # dwm <clientclass>         <border> <bg> <text> <indicator>
 client.focused          #196584 #005577 #eeeeee #006891
 client.focused_inactive #565656 #444444 #eeeeee #5E5E5E
 client.unfocused        #373737 #222222 #bbbbbb #3B3B3B
 client.urgent           #7E1919 #700000 #eeeeee #8A0000
-
-# autostart
-exec --no-startup-id compton
 
 # $i3-background
 exec_always --no-startup-id hsetroot -solid '#005577'

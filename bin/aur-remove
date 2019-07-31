@@ -1,0 +1,78 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+
+use File::Basename;
+use File::Find;
+
+use Getopt::Std;
+$Getopt::Std::STANDARD_HELP_VERSION = 1;
+$main::VERSION = 2.4;
+
+our $opt_d = 0;
+getopts('d');
+
+sub main::HELP_MESSAGE() {
+    print "\nUsage: remove [-d] [--] pkgname [pkgname...]\n";
+}
+
+# https://metacpan.org/source/ZMIJ/Array-Utils-0.5/Utils.pm
+sub array_minus(\@\@) {
+    my %e = map{ $_ => undef } @{$_[1]};
+    return grep( ! exists( $e{$_} ), @{$_[0]} ); 
+}
+
+# PKGBUILD(5)
+sub file_match_pkgname($$) {
+    return $_[0] =~ /((?=[^\-\.])[\w\-@\.\+]+)\-(\d:)?([^:\/\-\s]+)\-(\d(\.\d)?)\-(\w+)(\.pkg\.tar)(\.\w+)?$/ && $1 eq $_[1];
+}
+
+if ($#ARGV < 0) {
+    print STDERR "remove: requires at least one package name\n";
+    exit(1);
+}
+
+my @packages;
+my %removals;
+my @repo_list = `aur repo --repo-list` or die;
+
+chomp @repo_list;
+for my $repo(@repo_list) {
+    find(sub {
+        return unless -f;
+
+        for my $needle(@ARGV) {
+	    if (file_match_pkgname($_, $needle)) {
+                push(@{$removals{$needle}}, readlink($repo));
+		push(@packages, $File::Find::name); # store full path
+            }
+        }
+    }, dirname($repo));
+}
+my @keys = keys %removals;
+
+for(array_minus(@ARGV, @keys)) {
+    print STDERR "Warning: package $_ not found in local repository\n";
+}
+
+# Remove packages from .db files (repository)
+for my $name(@keys) {
+    for my $path(@{$removals{$name}}) {
+	if ($opt_d == 0) {
+	    system('repo-remove', $path, $name);
+	} else {
+	    print("[DRY] repo-remove $path $name\n");
+	}
+    }
+}
+
+# Remove package files from disk
+for my $file(@packages) {
+    if ($opt_d == 0 && unlink $file) {
+	print("unlinked $file\n");
+    } elsif ($opt_d == 0) {
+	warn("error: could not unlink $file\n");
+    } else {
+	print("[DRY] unlink $file\n");
+    }
+}
