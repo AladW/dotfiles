@@ -31,25 +31,19 @@ elif [ -f usr/lib/qt/plugins/platformthemes/libqt5ct.so ]; then
    export QT_QPA_PLATOFRMTHEME=qt5ct
 fi
 
-#1 run desktop files
-dex --autostart --environment XFCE &
+#0 autostart
+dex -a --environment MATE &
 
-#2 mouse settings
-xfconf-query -c xsettings -p /Gtk/CursorThemeSize -s 16
-xfconf-query -c xsettings -p /Gtk/CursorThemeName -s Adwaita
-
-#3 keyboard settings
-xfconf-query -c keyboard-layout -p /Default/XkbLayout -s gb
-xfconf-query -c keyboard-layout -p /Default/XkbVariant -s extd
-
-#4 compositing manager
+#1 settings to X11 applications
+xsettingsd &
+#2 keyboard settings
+setxkbmap -layout gb -variant extd
+#3 removable media
+udiskie -AFs &
+#4 screen locker
+xss-lock -n true -- i3lock -c '#005577' &
+#5 compositing manager
 compton &
 
-#5 removable media
-udiskie -AFs &
-
-#6 display brightness
-xbacklight -set 60
-
-#7 window manager
+#6 window manager
 exec i3

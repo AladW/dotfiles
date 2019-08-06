@@ -2,6 +2,7 @@
 use strict;
 use warnings;
 
+use Cwd 'abs_path';
 use File::Basename;
 use File::Find;
 
@@ -10,10 +11,11 @@ $Getopt::Std::STANDARD_HELP_VERSION = 1;
 $main::VERSION = 2.4;
 
 our $opt_d = 0;
-getopts('d');
+our $opt_r = "";
+getopts('dr:');
 
 sub main::HELP_MESSAGE() {
-    print "\nUsage: remove [-d] [--] pkgname [pkgname...]\n";
+    print "\nUsage: remove [-d] [-r <repo>] [--] pkgname [pkgname...]\n";
 }
 
 # https://metacpan.org/source/ZMIJ/Array-Utils-0.5/Utils.pm
@@ -23,8 +25,13 @@ sub array_minus(\@\@) {
 }
 
 # PKGBUILD(5)
+my $pkgspec = qr/((?=[^\-\.])[\w\-@\.\+]+)\-(\d:)?([^:\/\-\s]+)\-(\d(\.\d)?)/;
+
 sub file_match_pkgname($$) {
-    return $_[0] =~ /((?=[^\-\.])[\w\-@\.\+]+)\-(\d:)?([^:\/\-\s]+)\-(\d(\.\d)?)\-(\w+)(\.pkg\.tar)(\.\w+)?$/ && $1 eq $_[1];
+    return $_[0] =~ /${pkgspec}\-(\w+)(\.pkg\.tar)(\.\w+)?$/ && $1 eq $_[1];
+}
+sub repo_match_pkgname($$) {
+    return $_[0] =~ /${pkgspec}\/$/ && $1 eq $_[1];
 }
 
 if ($#ARGV < 0) {
@@ -32,31 +39,50 @@ if ($#ARGV < 0) {
     exit(1);
 }
 
-my @packages;
+my %packages;
 my %removals;
-my @repo_list = `aur repo --repo-list` or die;
+my @repo_list;
 
+if (length($opt_r) > 1) {
+    @repo_list = `aur repo -d $opt_r` or die;
+} else {
+    @repo_list = `aur repo --repo-list` or die;
+}
 chomp @repo_list;
+
 for my $repo(@repo_list) {
+    my @contents = `tar -tf $repo --exclude='*/*'`;
+    chomp @contents;
+
+    for my $entry(@contents) {
+	for my $needle(@ARGV) {
+	    if (repo_match_pkgname($entry, $needle)) {
+		push(@{$removals{$needle}}, abs_path($repo));
+	    }
+	}
+    }
     find(sub {
         return unless -f;
 
         for my $needle(@ARGV) {
 	    if (file_match_pkgname($_, $needle)) {
-                push(@{$removals{$needle}}, readlink($repo));
-		push(@packages, $File::Find::name); # store full path
+		push(@{$packages{$needle}}, $File::Find::name); # store full path
             }
         }
     }, dirname($repo));
 }
-my @keys = keys %removals;
+my @keys_r = keys %removals;
+my @keys_p = keys %packages;
 
-for(array_minus(@ARGV, @keys)) {
-    print STDERR "Warning: package $_ not found in local repository\n";
+for(array_minus(@ARGV, @keys_r)) {
+    warn("warning: $_ not found in database\n");
+}
+for(array_minus(@ARGV, @keys_p)) {
+    warn("warning: $_ not found in cache\n");
 }
 
 # Remove packages from .db files (repository)
-for my $name(@keys) {
+for my $name(@keys_r) {
     for my $path(@{$removals{$name}}) {
 	if ($opt_d == 0) {
 	    system('repo-remove', $path, $name);
@@ -65,14 +91,19 @@ for my $name(@keys) {
 	}
     }
 }
+if (scalar(@keys_r) > 0 && $opt_d == 0) {
+    print("note: database modified, run 'pacsync' to reflect changes\n");
+}
 
 # Remove package files from disk
-for my $file(@packages) {
-    if ($opt_d == 0 && unlink $file) {
-	print("unlinked $file\n");
-    } elsif ($opt_d == 0) {
-	warn("error: could not unlink $file\n");
-    } else {
-	print("[DRY] unlink $file\n");
+for my $name(@keys_p) {
+    for my $file(@{$packages{$name}}) {
+	if ($opt_d == 0 && unlink $file) {
+	    print("unlinked $file\n");
+	} elsif ($opt_d == 0) {
+	    warn "warning: could not unlink $file\n";
+	} else {
+	    print("[DRY] unlinked $file\n");
+	}
     }
 }
