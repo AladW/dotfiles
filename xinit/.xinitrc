@@ -23,6 +23,7 @@ fi
 export COLORTERM=truecolor
 export NO_AT_BRIDGE=1
 export GTK_OVERLAY_SCROLLING=0
+export XDG_CURRENT_DESKTOP=X-Generic
 
 # environment variables (qt5)
 if [ -f /usr/lib/qt/plugins/platformthemes/libqgtk2.so ]; then
@@ -31,19 +32,24 @@ elif [ -f usr/lib/qt/plugins/platformthemes/libqt5ct.so ]; then
    export QT_QPA_PLATOFRMTHEME=qt5ct
 fi
 
-#0 autostart
+#0 autostart (xdg)
 dex -a --environment MATE &
 
 #1 settings to X11 applications
 xsettingsd &
+
 #2 keyboard settings
 setxkbmap -layout gb -variant extd
+
 #3 removable media
 udiskie -AFs &
+
 #4 screen locker
-xss-lock -n true -- i3lock -c '#005577' &
+xset s 600 420
+xss-lock -n x-dim-screen -l -- x-screenlocker &
+
 #5 compositing manager
-compton &
+compton --config /dev/null --backend glx --vsync &
 
 #6 window manager
 exec i3

@@ -6,22 +6,37 @@ use Cwd 'abs_path';
 use File::Basename;
 use File::Find;
 
-use Getopt::Std;
-$Getopt::Std::STANDARD_HELP_VERSION = 1;
-$main::VERSION = 2.4;
+use Getopt::Long;
+my $opt_d = 0;
+my $opt_h = 0;
+my $opt_r = "";
 
-our $opt_d = 0;
-our $opt_r = "";
-getopts('dr:');
-
-sub main::HELP_MESSAGE() {
-    print "\nUsage: remove [-d] [-r <repo>] [--] pkgname [pkgname...]\n";
+sub usage() {
+    print STDERR "Usage: remove [-d] [-r <repo>] [--] pkgname [pkgname...]\n";
+    exit(1);
 }
+GetOptions('dryrun|print' => \$opt_d, 'database|repo=s' => \$opt_r,
+	   'help' => \$opt_h) or usage();
+usage() if ($opt_h == 1);
 
 # https://metacpan.org/source/ZMIJ/Array-Utils-0.5/Utils.pm
 sub array_minus(\@\@) {
     my %e = map{ $_ => undef } @{$_[1]};
     return grep( ! exists( $e{$_} ), @{$_[0]} ); 
+}
+
+# compatibility to aurutils <=2.3
+sub repo_23_compat() {
+    my @tsv = `aur repo --repo-list` or die;
+    my @res;
+
+    for my $line(@tsv) {
+        chomp($line);
+        my @cols = split(/\t/, $line);
+
+        push @res, "$cols[1]/$cols[0].db";
+    }
+    return @res;
 }
 
 # PKGBUILD(5)
@@ -46,7 +61,11 @@ my @repo_list;
 if (length($opt_r) > 1) {
     @repo_list = `aur repo -d $opt_r` or die;
 } else {
-    @repo_list = `aur repo --repo-list` or die;
+    if (defined $ENV{'AUR_23_COMPAT'}) {
+	@repo_list = repo_23_compat();
+    } else {
+	@repo_list = `aur repo --repo-list` or die;
+    }
 }
 chomp @repo_list;
 
@@ -55,18 +74,20 @@ for my $repo(@repo_list) {
     chomp @contents;
 
     for my $entry(@contents) {
-	for my $needle(@ARGV) {
-	    if (repo_match_pkgname($entry, $needle)) {
-		push(@{$removals{$needle}}, abs_path($repo));
-	    }
-	}
+        # TODO: remove entry from matcher if found (repo can only
+        # contain one entry per package name) -> use hash
+        for my $needle(@ARGV) {
+            if (repo_match_pkgname($entry, $needle)) {
+                push(@{$removals{$needle}}, abs_path($repo));
+            }
+        }
     }
     find(sub {
         return unless -f;
 
         for my $needle(@ARGV) {
-	    if (file_match_pkgname($_, $needle)) {
-		push(@{$packages{$needle}}, $File::Find::name); # store full path
+            if (file_match_pkgname($_, $needle)) {
+                push(@{$packages{$needle}}, $File::Find::name); # store full path
             }
         }
     }, dirname($repo));
@@ -81,16 +102,18 @@ for(array_minus(@ARGV, @keys_p)) {
     warn("warning: $_ not found in cache\n");
 }
 
-# Remove packages from .db files (repository)
+# Remove repository entries
 for my $name(@keys_r) {
     for my $path(@{$removals{$name}}) {
-	if ($opt_d == 0) {
-	    system('repo-remove', $path, $name);
-	} else {
-	    print("[DRY] repo-remove $path $name\n");
-	}
+        if ($opt_d == 0) {
+            system('repo-remove', $path, $name);
+        } else {
+            print("[DRY] repo-remove $path $name\n");
+        }
     }
 }
+
+# TODO: print a command for each changed database (pacsync <foo>, ...)
 if (scalar(@keys_r) > 0 && $opt_d == 0) {
     print("note: database modified, run 'pacsync' to reflect changes\n");
 }
@@ -98,12 +121,12 @@ if (scalar(@keys_r) > 0 && $opt_d == 0) {
 # Remove package files from disk
 for my $name(@keys_p) {
     for my $file(@{$packages{$name}}) {
-	if ($opt_d == 0 && unlink $file) {
-	    print("unlinked $file\n");
-	} elsif ($opt_d == 0) {
-	    warn "warning: could not unlink $file\n";
-	} else {
-	    print("[DRY] unlinked $file\n");
-	}
+        if ($opt_d == 0 && unlink $file) {
+            print("unlinked $file\n");
+        } elsif ($opt_d == 0) {
+            warn("warning: could not unlink $file\n");
+        } else {
+            print("[DRY] unlinked $file\n");
+        }
     }
 }

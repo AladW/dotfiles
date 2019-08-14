@@ -130,3 +130,11 @@ fi
 alias grep='grep --color=auto'
 alias ls='ls --color=auto'
 alias mc='. /usr/lib/mc/mc-wrapper.sh -x'
+
+# shell-specific variables
+export EDITOR=vim
+export VISUAL=vim
+
+export AUR_REPO=alad
+export AUR_ROOT=/var/cache/pacman/alad
+export AUR_23_COMPAT=1

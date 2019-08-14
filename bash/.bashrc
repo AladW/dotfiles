@@ -28,3 +28,7 @@ shopt -s histappend
 # shell-specific environment variables
 export EDITOR=vim
 export VISUAL=vim
+
+export AUR_REPO=alad
+export AUR_ROOT=/var/cache/pacman/alad
+export AUR_23_COMPAT=1

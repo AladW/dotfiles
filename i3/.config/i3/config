@@ -167,16 +167,16 @@ mode "resize" {
 bindsym $mod+r mode "resize"
 
 # set screen locker
-set $locker i3lock -c '#005577'
-bindsym Ctrl+Mod1+L exec --no-startup-id $locker
+#set $locker i3lock -c '#005577'
+bindsym Ctrl+Mod1+L exec --no-startup-id x-screenlocker
 
 # system reboot and lock menu
 set $mode_system System (l) lock, (e) logout, (s) suspend, (h) hibernate, (r) reboot, (Shift+s) shutdown
 mode "$mode_system" {
-    bindsym l exec --no-startup-id $locker, mode "default"
+    bindsym l exec --no-startup-id x-screenlocker, mode "default"
     bindsym e exec --no-startup-id i3-msg exit, mode "default"
-    bindsym s exec --no-startup-id $locker && systemctl -i suspend, mode "default"
-    bindsym h exec --no-startup-id $locker && systemctl -i hibernate, mode "default"
+    bindsym s exec --no-startup-id x-screenlocker && systemctl -i suspend, mode "default"
+    bindsym h exec --no-startup-id x-screenlocker && systemctl -i hibernate, mode "default"
     bindsym r exec --no-startup-id systemctl -i reboot, mode "default"
     bindsym Shift+s exec --no-startup-id systemctl -i poweroff, mode "default"  
 
@@ -191,7 +191,9 @@ bindsym $mod+Pause mode "$mode_system"
 # finds out, if available)
 bar {
     font pango:DejaVu Sans Mono 11
+    position bottom
     status_command i3status
+    tray_output primary
     tray_padding 0
 
     colors {
@@ -208,27 +210,50 @@ bar {
    }
 }
 
+# bar {
+#     position top
+#     status_command i3status
+#     tray_output none
+#     workspace_buttons no
+# }
+
 # window rules
-for_window [class="Xscreensaver-demo"] floating enable
-for_window [class="Lxappearance"] floating enable
-for_window [class="Gnuplot_qt"] floating enable
-for_window [class="GQview" instance="tools"] floating enable
-for_window [class="Arandr"] floating enable
 for_window [class="Anki"] floating enable
-for_window [class="Galculator"] floating enable
-for_window [class="Connman-gtk"] floating enable
-for_window [class="Pybgsetter"] floating enable
+for_window [class="Arandr"] floating enable
 for_window [class="Asoundconf-gtk"] floating enable
+for_window [class="Blueman-manager"] floating enable
+for_window [class="Connman-gtk"] floating enable
+for_window [class="Double Commander" title="Options"] floating enable
+for_window [class="GQview" instance="tools"] floating enable
+for_window [class="Galculator"] floating enable
+for_window [class="Gnuplot_qt"] floating enable
+for_window [class="keepassxc" title="Unlock Database"] floating enable
+for_window [class="Liferea" title="Plugin Installer"] floating enable
+for_window [class="Lxappearance"] floating enable
+for_window [class="Nm-connection-editor"] floating enable
+for_window [class="Pybgsetter"] floating enable
 for_window [class="Thunderbird" instance="Msgcompose"] floating enable
 for_window [class="Viewnior"] floating enable
-for_window [class="Blueman-manager"] floating enable
-for_window [class="Double Commander" title="Options"] floating enable
+for_window [class="Xscreensaver-demo"] floating enable
+for_window [class="zrandr"] floating enable
 for_window [window_role="News-BlogSubscriptions"] floating enable
 for_window [window_role="(?i)filterlist"] floating enable
 for_window [window_role="(?i)manager"] floating enable
 for_window [window_role="(?i)preferences"] floating enable
 for_window [window_role="(?i)addressbook"] floating enable
 for_window [title="^Event Tester$"] floating enable
+
+# https://github.com/ValveSoftware/steam-for-linux/issues/1040
+for_window [class="^Steam$" title="^Friends$"] floating enable
+for_window [class="^Steam$" title="Steam - News"] floating enable
+for_window [class="^Steam$" title=".* - Chat"] floating enable
+for_window [class="^Steam$" title="^Settings$"] floating enable
+for_window [class="^Steam$" title=".* - event started"] floating enable
+for_window [class="^Steam$" title=".* CD key"] floating enable
+for_window [class="^Steam$" title="^Steam - Self Updater$"] floating enable
+for_window [class="^Steam$" title="^Screenshot Uploader$"] floating enable
+for_window [class="^Steam$" title="^Steam Guard - Computer Authorization Required$"] floating enable
+for_window [title="^Steam Keyboard$"] floating enable
 
 # Automatic back-and-forth when switching to current workspace
 workspace_auto_back_and_forth yes
@@ -252,6 +277,8 @@ bindsym XF86AudioRaiseVolume exec --no-startup-id amixer sset Master 5%+ \
 	&& pkill -USR1 i3status
 bindsym XF86AudioMute exec --no-startup-id amixer sset Master toggle \
 	&& pkill -USR1 i3status
+bindsym XF86MonBrightnessUp exec --no-startup-id xbacklight -inc 10
+bindsym XF86MonBrightnessDown exec --no-startup-id xbacklight -dec 10
 
 # screenshot
 bindsym Print exec --no-startup-id xfce4-screenshooter
