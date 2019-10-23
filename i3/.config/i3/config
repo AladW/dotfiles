@@ -168,7 +168,7 @@ bindsym $mod+r mode "resize"
 
 # set screen locker
 #set $locker i3lock -c '#005577'
-bindsym Ctrl+Mod1+L exec --no-startup-id x-screenlocker
+bindsym Ctrl+Mod1+L exec --no-startup-id xscreensaver-command -lock
 
 # system reboot and lock menu
 set $mode_system System (l) lock, (e) logout, (s) suspend, (h) hibernate, (r) reboot, (Shift+s) shutdown
@@ -231,6 +231,7 @@ for_window [class="keepassxc" title="Unlock Database"] floating enable
 for_window [class="Liferea" title="Plugin Installer"] floating enable
 for_window [class="Lxappearance"] floating enable
 for_window [class="Nm-connection-editor"] floating enable
+for_window [class="Pavucontrol"] floating enable
 for_window [class="Pybgsetter"] floating enable
 for_window [class="Thunderbird" instance="Msgcompose"] floating enable
 for_window [class="Viewnior"] floating enable
@@ -271,14 +272,11 @@ bindsym $mod+Shift+minus move scratchpad
 bindsym $mod+minus scratchpad show
 
 # acpi handler
-bindsym XF86AudioLowerVolume exec --no-startup-id amixer sset Master 5%- \
-	&& pkill -USR1 i3status
-bindsym XF86AudioRaiseVolume exec --no-startup-id amixer sset Master 5%+ \
-	&& pkill -USR1 i3status
-bindsym XF86AudioMute exec --no-startup-id amixer sset Master toggle \
-	&& pkill -USR1 i3status
-bindsym XF86MonBrightnessUp exec --no-startup-id xbacklight -inc 10
-bindsym XF86MonBrightnessDown exec --no-startup-id xbacklight -dec 10
+bindsym XF86AudioLowerVolume exec --no-startup-id pkill -USR1 i3status
+bindsym XF86AudioRaiseVolume exec --no-startup-id pkill -USR1 i3status
+bindsym XF86AudioMute exec --no-startup-id pkill -USR1 i3status
+#bindsym XF86MonBrightnessUp exec --no-startup-id xbacklight -inc 10
+#bindsym XF86MonBrightnessDown exec --no-startup-id xbacklight -dec 10
 
 # screenshot
 bindsym Print exec --no-startup-id xfce4-screenshooter

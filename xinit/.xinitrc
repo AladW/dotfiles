@@ -33,23 +33,29 @@ elif [ -f usr/lib/qt/plugins/platformthemes/libqt5ct.so ]; then
 fi
 
 #0 autostart (xdg)
-dex -a --environment MATE &
+dex --autostart --environment MATE
 
-#1 settings to X11 applications
+#1 disable PC speaker
+xset -b
+
+#2 multimedia keys
+uacpid --opendisplay --tty &
+
+#3 settings to X11 applications
 xsettingsd &
 
-#2 keyboard settings
+#4 keyboard settings
 setxkbmap -layout gb -variant extd
 
-#3 removable media
+#5 removable media
 udiskie -AFs &
 
-#4 screen locker
-xset s 600 420
-xss-lock -n x-dim-screen -l -- x-screenlocker &
+#6 screen locker
+xscreensaver -no-splash &
+#xss-lock -l -- transfer-sleep-lock-generic-delay.sh &
 
-#5 compositing manager
+#7 compositing manager
 compton --config /dev/null --backend glx --vsync &
 
-#6 window manager
+# window manager
 exec i3
