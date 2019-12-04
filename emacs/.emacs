@@ -61,7 +61,6 @@
 
 (defun my-c++-mode-hook ()
   (c-set-style "my-style"))        ;; use my-style defined above
-
 (add-hook 'c++-mode-hook 'my-c++-mode-hook)
 
 (custom-set-variables

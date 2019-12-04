@@ -107,6 +107,15 @@ set $ws7 "7"
 set $ws8 "8"
 set $ws9 "9"
 set $ws10 "10"
+set $ws11 "11"
+set $ws12 "12"
+set $ws13 "13"
+set $ws14 "14"
+set $ws15 "15"
+set $ws16 "16"
+set $ws17 "17"
+set $ws18 "18"
+set $ws19 "19"
 
 # switch to workspace
 bindsym $mod+1 workspace $ws1
@@ -168,7 +177,7 @@ bindsym $mod+r mode "resize"
 
 # set screen locker
 #set $locker i3lock -c '#005577'
-bindsym Ctrl+Mod1+L exec --no-startup-id xscreensaver-command -lock
+bindsym Ctrl+Mod1+L exec --no-startup-id x-screenlocker
 
 # system reboot and lock menu
 set $mode_system System (l) lock, (e) logout, (s) suspend, (h) hibernate, (r) reboot, (Shift+s) shutdown
@@ -193,6 +202,7 @@ bar {
     font pango:DejaVu Sans Mono 11
     position bottom
     status_command i3status
+
     tray_output primary
     tray_padding 0
 
@@ -222,19 +232,22 @@ for_window [class="Anki"] floating enable
 for_window [class="Arandr"] floating enable
 for_window [class="Asoundconf-gtk"] floating enable
 for_window [class="Blueman-manager"] floating enable
+for_window [class="Cisco AnyConnect Secure Mobility Client"] floating enable
 for_window [class="Connman-gtk"] floating enable
 for_window [class="Double Commander" title="Options"] floating enable
 for_window [class="GQview" instance="tools"] floating enable
 for_window [class="Galculator"] floating enable
 for_window [class="Gnuplot_qt"] floating enable
-for_window [class="keepassxc" title="Unlock Database"] floating enable
+for_window [class="KeePassXC" title="Unlock Database"] floating enable
 for_window [class="Liferea" title="Plugin Installer"] floating enable
 for_window [class="Lxappearance"] floating enable
 for_window [class="Nm-connection-editor"] floating enable
 for_window [class="Pavucontrol"] floating enable
 for_window [class="Pybgsetter"] floating enable
+for_window [class="Seahorse"] floating enable
 for_window [class="Thunderbird" instance="Msgcompose"] floating enable
 for_window [class="Viewnior"] floating enable
+for_window [class="Xarchiver"] floating enable
 for_window [class="Xscreensaver-demo"] floating enable
 for_window [class="zrandr"] floating enable
 for_window [window_role="News-BlogSubscriptions"] floating enable
@@ -242,6 +255,7 @@ for_window [window_role="(?i)filterlist"] floating enable
 for_window [window_role="(?i)manager"] floating enable
 for_window [window_role="(?i)preferences"] floating enable
 for_window [window_role="(?i)addressbook"] floating enable
+for_window [window_role="(?i)about"] floating enable
 for_window [title="^Event Tester$"] floating enable
 
 # https://github.com/ValveSoftware/steam-for-linux/issues/1040
@@ -281,6 +295,9 @@ bindsym XF86AudioMute exec --no-startup-id pkill -USR1 i3status
 # screenshot
 bindsym Print exec --no-startup-id xfce4-screenshooter
 bindsym Shift+Print exec --no-startup-id xfce4-screenshooter -r
+
+# others
+bindsym $mod+p exec --no-startup-id rofimoji -c
 
 # dwm <clientclass>         <border> <bg> <text> <indicator>
 client.focused          #196584 #005577 #eeeeee #006891

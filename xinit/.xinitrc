@@ -6,7 +6,7 @@ if [ -f "$userresources" ]; then
     xrdb -merge "$userresources"
 fi
 
-# start some nice programs
+# 50-systemd-user.sh
 if [ -d /etc/X11/xinit/xinitrc.d ] ; then
     for f in /etc/X11/xinit/xinitrc.d/?*.sh ; do
         [ -x "$f" ] && . "$f"
@@ -28,34 +28,31 @@ export XDG_CURRENT_DESKTOP=X-Generic
 # environment variables (qt5)
 if [ -f /usr/lib/qt/plugins/platformthemes/libqgtk2.so ]; then
    export QT_QPA_PLATFORMTHEME=gtk2
-elif [ -f usr/lib/qt/plugins/platformthemes/libqt5ct.so ]; then
-   export QT_QPA_PLATOFRMTHEME=qt5ct
+elif [ -f /usr/lib/qt/plugins/platformthemes/libqt5ct.so ]; then
+   export QT_QPA_PLATFORMTHEME=qt5ct
 fi
 
-#0 autostart (xdg)
-dex --autostart --environment MATE
+# autostart (xdg)
+dex -a blueman.desktop
+dex -a gnome-keyring-secrets.desktop
+dex -a nm-applet.desktop
+dex -a polkit-mate-authentication-agent-1.desktop
+dex -a xfsettingsd.desktop
 
 #1 disable PC speaker
 xset -b
 
-#2 multimedia keys
-uacpid --opendisplay --tty &
-
-#3 settings to X11 applications
-xsettingsd &
-
-#4 keyboard settings
+#2 keyboard settings
 setxkbmap -layout gb -variant extd
 
-#5 removable media
+#3 removable media
 udiskie -AFs &
 
-#6 screen locker
-xscreensaver -no-splash &
-#xss-lock -l -- transfer-sleep-lock-generic-delay.sh &
+#4 screen locker
+xss-lock -l -- x-screenlocker &
 
-#7 compositing manager
-compton --config /dev/null --backend glx --vsync &
+#5 multimedia keys
+uacpid --opendisplay --tty &
 
 # window manager
 exec i3

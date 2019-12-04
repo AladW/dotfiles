@@ -5,6 +5,7 @@
 # If not running interactively, don't do anything
 [[ $- != *i* ]] && return
 
+alias bl='xbacklight -set'
 alias grep='grep --color=auto'
 alias ix="curl -F 'f:1=<-' ix.io"
 alias sprunge="curl -F 'sprunge=<-' sprunge.us"
@@ -29,6 +30,8 @@ shopt -s histappend
 export EDITOR=vim
 export VISUAL=vim
 
+# aurutils
+export AURDEST=/home/aur
 export AUR_REPO=alad
 export AUR_ROOT=/var/cache/pacman/alad
 export AUR_23_COMPAT=1
