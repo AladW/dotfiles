@@ -144,5 +144,3 @@ export VISUAL=vim
 # aurutils
 export AURDEST=/home/aur
 export AUR_REPO=alad
-export AUR_DBROOT=/var/lib/aurutils/alad
-export AUR_23_COMPAT=1

@@ -4,22 +4,35 @@ use warnings;
 
 use Cwd 'abs_path';
 use File::Basename;
+use File::Copy;
 use File::Find;
+use File::Temp 'tempfile';
 
 use Getopt::Long;
 my $opt_d = 0;
 my $opt_h = 0;
-my $opt_r = "";
+my $opt_f = "";
+my $opt_t = "";
 
 sub usage() {
-    print STDERR "Usage: remove [-d] [-r <repo>] [--] pkgname [pkgname...]\n";
+    print STDERR "Usage: remove [-d] [-f from] [-t to] [--] pkgname [pkgname...]\n";
     exit(1);
 }
-GetOptions('dryrun|print'    => \$opt_d,
-	   'database|repo=s' => \$opt_r,
-	   'help'            => \$opt_h)
+GetOptions('d|dryrun|print' => \$opt_d,
+           'f|from=s' => \$opt_f,
+           'h|help'   => \$opt_h,
+           't|to=s'   => \$opt_t)
      or usage();
 usage() if ($opt_h == 1);
+
+if (length($opt_t) == 0 && (basename($0) eq "aur-move")) {
+  print STDERR "--move requires both a source (-f) and target (-t)\n";
+  usage();
+}
+if (length($opt_t) > 1 && length($opt_f) == 0) {
+  print STDERR "--move requires both a source (-f) and target (-t)\n";
+  usage();
+}
 
 # https://metacpan.org/source/ZMIJ/Array-Utils-0.5/Utils.pm
 sub array_minus(\@\@) {
@@ -27,18 +40,35 @@ sub array_minus(\@\@) {
     return grep( ! exists( $e{$_} ), @{$_[0]} ); 
 }
 
-# compatibility to aurutils <=2.3
-sub repo_23_compat() {
-    my @tsv = `aur repo --repo-list` or die;
-    my @res;
+sub local_repo_path($) {
+    my $repo = $_[0];
+    my @list = `pacconf --repo=$repo Server` or die;
+    chomp(@list);
+    my @paths;
 
-    for my $line(@tsv) {
-        chomp($line);
-        my @cols = split(/\t/, $line);
-
-        push @res, "$cols[1]/$cols[0].db";
+    for my $serv(@list) {
+        if ($serv =~ /^file:\/\//) {
+            $serv =~ s/file:\/\///;
+            push(@paths, $serv . "/" . $repo . ".db");
+        }
     }
-    return @res;
+    return @paths;
+}
+
+sub local_repo_list() {
+    my @list = `pacconf --repo-list` or die;
+    my @list_local;
+    chomp @list;
+
+    for my $repo(@list) {
+        my @paths = local_repo_path($repo);
+        chomp @paths;
+
+        for my $path(@paths) {
+            push(@list_local, $path);
+        }
+    }
+    return @list_local;
 }
 
 # PKGBUILD(5)
@@ -59,18 +89,19 @@ if ($#ARGV < 0) {
 my %packages;
 my %removals;
 my @repo_list;
+my @move_list;
 my %to_sync;
 
-if (length($opt_r) > 1) {
-    @repo_list = `env -u AUR_DBROOT aur repo -d $opt_r` or die;
-} else {
-    if (defined $ENV{'AUR_23_COMPAT'}) {
-        @repo_list = repo_23_compat();
-    } else {
-        @repo_list = `aur repo --repo-list` or die;
+if (length($opt_f) > 1) {
+    @repo_list = local_repo_path($opt_f);
+    if (length($opt_t) > 1) {
+        @move_list = local_repo_path($opt_t);
     }
+} else {
+    @repo_list = local_repo_list();
 }
 chomp @repo_list;
+chomp @move_list;
 
 for my $repo(@repo_list) {
     my @contents = `tar -tf $repo --exclude='*/*'`;
@@ -79,18 +110,16 @@ for my $repo(@repo_list) {
     for my $entry(@contents) {
         for my $needle(@ARGV) {
             if (repo_match_pkgname($entry, $needle)) {
-              push(@{$removals{$needle}}, abs_path($repo));
+                push(@{$removals{$needle}}, abs_path($repo));
 
-              my $db_name = basename($repo, ".db");
-              if (!(exists $to_sync{$db_name})) {
-                $to_sync{$db_name} = 1;
-              }
+                my $db_name = basename($repo, ".db");
+                $to_sync{$db_name} = 1
+                    unless exists $to_sync{$db_name};
             }
         }
     }
     find(sub {
             return unless -f;
-
             for my $needle(@ARGV) {
                 if (file_match_pkgname($_, $needle)) {
                     push(@{$packages{$needle}}, $File::Find::name); # store full path
@@ -101,7 +130,6 @@ for my $repo(@repo_list) {
 }
 my @keys_r = keys %removals;
 my @keys_p = keys %packages;
-my @keys_s = keys %to_sync;
 
 for(array_minus(@ARGV, @keys_r)) {
     warn("warning: $_ not found in database\n");
@@ -110,10 +138,72 @@ for(array_minus(@ARGV, @keys_p)) {
     warn("warning: $_ not found in cache\n");
 }
 
-# Remove repository entries
+# (Re)move package files from disk
+for my $name(@keys_p) {
+    for my $file(@{$packages{$name}}) {
+        if (scalar(@move_list) > 0) {
+            # XXX move to multiple repositories?
+            my $move_target = dirname($move_list[0]);
+
+            if ($opt_d == 0 && move($file, $move_target)) {
+                print("moved $file to " . $move_target . "\n");
+            } elsif ($opt_d == 0) {
+                warn("warning: could not move $file to $move_target\n");
+            } else {
+                print("[DRY] mv $file " . dirname($move_list[0]) . "\n");
+            }
+        } elsif ($opt_d == 0 && unlink $file) {
+            print("unlinked $file\n");
+        } elsif ($opt_d == 0) {
+            warn("warning: could not unlink $file\n");
+        } else {
+            print("[DRY] unlink $file\n");
+        }
+    }
+}
+
+# Update repository entries
 for my $name(@keys_r) {
     for my $path(@{$removals{$name}}) {
-        if ($opt_d == 0) {
+        if (scalar(@move_list) > 0) {
+            my $target_pkg;
+            my @packages;
+
+            if (defined $packages{$name}) {
+                @packages = @{$packages{$name}};
+            } else {
+                die "package list empty";
+            }
+
+            if (scalar(@packages) > 1) {
+                # perl, in the typical fashion of a "real" programming
+                # language, is completely fucking useless when
+                # confronted with even the most trivial piping
+                # tasks. As such, leave it all to bash and tempfiles.
+                my ($fh, $filename) = tempfile();
+                print $fh join("\n", @packages);
+
+                my @sorted_pkg = `pacsort -r $filename` or die "pacsort: $!";
+                chomp(@sorted_pkg);
+                close($fh);
+
+                $target_pkg = basename($sorted_pkg[0]);
+            } else {
+                $target_pkg = basename($packages[0]);
+            }
+            my $new_path = dirname($move_list[0]) . "/" . $target_pkg;
+
+            if ($opt_d == 0) {
+                # XXX only add file if $new_path exists
+                system('repo-add', abs_path($move_list[0]), $new_path);
+                system('repo-remove', $path, $name);
+
+                $to_sync{basename($move_list[0])} = 1;
+            } else {
+                print("[DRY] repo-add " . abs_path($move_list[0]) . " " . $new_path . "\n");
+                print("[DRY] repo-remove $path $name\n");
+            }
+        } elsif ($opt_d == 0) {
             system('repo-remove', $path, $name);
         } else {
             print("[DRY] repo-remove $path $name\n");
@@ -121,22 +211,12 @@ for my $name(@keys_r) {
     }
 }
 
+# Print suggested database upgrades
 if ($opt_d == 0) {
-     for my $repo(@keys_s) {
-	  my $cmd = "pacsync " . $repo;
-	  print("note: database modified, run '" . $cmd . "' to reflect changes\n");
-     }
-}
+    my @keys_s = keys %to_sync;
 
-# Remove package files from disk
-for my $name(@keys_p) {
-    for my $file(@{$packages{$name}}) {
-        if ($opt_d == 0 && unlink $file) {
-            print("unlinked $file\n");
-        } elsif ($opt_d == 0) {
-            warn("warning: could not unlink $file\n");
-        } else {
-            print("[DRY] unlink $file\n");
-        }
+    for my $repo(@keys_s) {
+        my $cmd = "pacsync " . $repo;
+        print("note: database modified, run '" . $cmd . "' to reflect changes\n");
     }
 }

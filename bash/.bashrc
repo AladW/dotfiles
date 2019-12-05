@@ -33,5 +33,4 @@ export VISUAL=vim
 # aurutils
 export AURDEST=/home/aur
 export AUR_REPO=alad
-export AUR_ROOT=/var/cache/pacman/alad
 export AUR_23_COMPAT=1
