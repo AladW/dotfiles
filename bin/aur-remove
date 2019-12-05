@@ -13,6 +13,7 @@ my $opt_d = 0;
 my $opt_h = 0;
 my $opt_f = "";
 my $opt_t = "";
+my $opt_s = 0;
 
 sub usage() {
     print STDERR "Usage: remove [-d] [-f from] [-t to] [--] pkgname [pkgname...]\n";
@@ -21,7 +22,8 @@ sub usage() {
 GetOptions('d|dryrun|print' => \$opt_d,
            'f|from=s' => \$opt_f,
            'h|help'   => \$opt_h,
-           't|to=s'   => \$opt_t)
+           't|to=s'   => \$opt_t,
+           's|sync'   => \$opt_s)
      or usage();
 usage() if ($opt_h == 1);
 
@@ -198,7 +200,7 @@ for my $name(@keys_r) {
                 system('repo-add', abs_path($move_list[0]), $new_path);
                 system('repo-remove', $path, $name);
 
-                $to_sync{basename($move_list[0])} = 1;
+                $to_sync{basename($move_list[0], ".db")} = 1;
             } else {
                 print("[DRY] repo-add " . abs_path($move_list[0]) . " " . $new_path . "\n");
                 print("[DRY] repo-remove $path $name\n");
@@ -212,11 +214,18 @@ for my $name(@keys_r) {
 }
 
 # Print suggested database upgrades
-if ($opt_d == 0) {
-    my @keys_s = keys %to_sync;
-
+my @keys_s = keys %to_sync;
+if ($opt_d == 0 && $opt_s == 0) {
     for my $repo(@keys_s) {
         my $cmd = "pacsync " . $repo;
         print("note: database modified, run '" . $cmd . "' to reflect changes\n");
+    }
+} elsif ($opt_d == 0) {
+    for my $repo(@keys_s) {
+        system('sudo', 'pacsync', $repo); # XXX "or" is triggered here, even on correct update
+    }
+} elsif ($opt_s == 1) {
+    for my $repo(@keys_s) {
+        print("[DRY] pacsync " . $repo . "\n");
     }
 }
