@@ -105,6 +105,11 @@ if (length($opt_f) > 1) {
 chomp @repo_list;
 chomp @move_list;
 
+die 'no file:// repository found (-f)'
+    unless scalar(@repo_list) > 0;
+die 'no file:// repository found (-m)'
+    unless scalar(@move_list) > 0 or $opt_t eq "";
+
 for my $repo(@repo_list) {
     my @contents = `tar -tf $repo --exclude='*/*'`;
     chomp @contents;
@@ -187,8 +192,8 @@ for my $name(@keys_r) {
 
                 my @sorted_pkg = `pacsort -r $filename` or die "pacsort: $!";
                 chomp(@sorted_pkg);
-                close($fh);
 
+                close($fh);
                 $target_pkg = basename($sorted_pkg[0]);
             } else {
                 $target_pkg = basename($packages[0]);
