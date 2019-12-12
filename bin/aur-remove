@@ -18,22 +18,25 @@ my $opt_s = 0;
 my $opt_c = "/etc/pacman.conf";
 my $opt_a = 0;
 my $opt_m = 0;
+my $opt_R = 0;
 
 sub usage($) {
     if ($_[0] eq "aur-remove") {
-        print STDERR "Usage: $_[0] [--dry] [-f from] [--] pkgname [pkgname...]\n";
+        print STDERR "Usage: $_[0] [--dry] [-f from...] [--] pkgname [pkgname...]\n";
     } elsif ($_[0] eq "aur-move") {
         print STDERR "Usage: $_[0] [--dry] [-f from] [-t to] [--] pkgname [pkgname...]\n";
     } elsif ($_[0] eq "aur-add") {
         print STDERR "Usage: $_[0] [--dry] [-t to] [--] package [package...]\n";
+    } elsif ($_[0] eq "aur-reset") {
+        print STDERR "Usage: $_[0] [--dry] [-f from...]\n";
     }
     exit(1);
 }
 
 # XXX expose repo-add -n/-p (--add)
-#     use hash with different options depending on mode/$0
-#     use generic name instead of "default" remove mode
+#     use modes as $1 (git) instead of mode options or basename $0
 #     allow to specify local repo path directly (--root <from> --root <to>)
+#     allow options to append to arrays where appropriate (--from A --from B)
 my $argv0 = basename($0);
 GetOptions('dryrun|print' => \$opt_d,
            'f|from=s' => \$opt_f,
@@ -42,7 +45,8 @@ GetOptions('dryrun|print' => \$opt_d,
            's|sync' => \$opt_s,
            'c|config=s' => \$opt_c,
            'a|add' => \$opt_a,
-           'm|move' => \$opt_m)
+           'm|move' => \$opt_m,
+           'R|reset' => \$opt_R)
     or usage($argv0);
 
 usage($argv0)
@@ -51,10 +55,15 @@ $opt_a = 1
     if ($argv0 eq "aur-add");
 $opt_m = 1
     if ($argv0 eq "aur-move");
+$opt_R = 1
+    if ($argv0 eq "aur-reset");
 
 # XXX -t invalid option for aur-remove?
 if (length($opt_t) == 0 && $opt_a) {
     print STDERR "--add requires a target (-t) repository\n";
+    usage($argv0);
+} elsif (length($opt_f) == 0 && $opt_R) {
+    print STDERR "--reset requires a source (-f) repository\n";
     usage($argv0);
 } elsif (length($opt_f) > 0 && $opt_a) {
     print STDERR "--add cannot be used with a source (-f) repository\n";
@@ -62,7 +71,7 @@ if (length($opt_t) == 0 && $opt_a) {
 } elsif (length($opt_t) == 0 && $opt_m == 1) {
     print STDERR "--move requires both a source (-f) and target (-t)\n";
     usage($argv0);
-} elsif (length($opt_t) > 1 && length($opt_f) == 0 && $opt_a == 0) {
+} elsif (length($opt_t) > 0 && length($opt_f) == 0 && $opt_a == 0) {
     print STDERR "--move requires both a source (-f) and target (-t)\n";
     usage($argv0);
 } elsif (not -e $opt_c) {
@@ -124,7 +133,7 @@ sub repo_match_pkgname($$) {
     return $_[0] =~ /${pkgspec}$/ && $1 eq $_[1];
 }
 
-if ($#ARGV < 0) {
+if ($#ARGV < 0 && not $opt_R) {
     print STDERR "$argv0: requires at least one package name\n";
     exit(1);
 }
@@ -170,13 +179,16 @@ if ($opt_a == 1) {
     if (scalar(@add_nval) > 0) {
         die "invalid packages specified";
     } else {
+        my $abs_path_t = abs_path($move_list[0]);
         for my $pkg (@add_list) {
             my $move_target = dirname($move_list[0]);
 
             # XXX Support adding a package to multiple repositories?
             if ($opt_d == 0 && move($pkg, $move_target)) {
-                if (system('repo-add', abs_path($move_list[0]), $move_target . "/" . $pkg)) {
+                if (system('repo-add', $abs_path_t, $move_target . "/" . $pkg) == 0) {
                     $to_sync{$db_name}++;
+                } else {
+                    print STDERR "repo-add failed: $?\n";
                 }
             } elsif ($opt_d == 0) {
                 warn("warning: could not move $pkg to $move_target\n");
@@ -189,7 +201,63 @@ if ($opt_a == 1) {
             }
         }
     }
-} elsif ($opt_a == 0) {
+} elsif ($opt_R == 1) {
+    # Remove the database and create a new copy with newest (vercmp) packages
+    my %candidates;
+
+    # XXX support multiple repositories
+    find(sub {
+        my @match = ($_ =~ /${pkgfile}$/);
+
+        if (scalar(@match) > 0) {
+            $candidates{$File::Find::name} = $match[0];
+        } else {
+            return;
+        }
+    }, dirname($repo_list[0]));
+
+    my @sorted;
+    if (scalar(keys %candidates) > 0) {
+        my ($fh, $filename) = tempfile();
+        for my $pkg(keys %candidates) {
+            print $fh "$pkg\n";
+        }
+
+        @sorted = `pacsort -r $filename` or die "pacsort: $!";
+        close($fh);
+        chomp(@sorted);
+    } else {
+        die "$argv0: no packages found";
+    }
+    my %names;
+    my @targets;
+
+    for my $pkg(@sorted) {
+        my $name = $candidates{$pkg};
+
+        push(@targets, $pkg)
+            unless exists $names{$name};
+        $names{$name} = 1;
+    }
+    my $abs_path_f = abs_path($repo_list[0]);
+
+    if ($opt_d == 0 && unlink $abs_path_f) {
+        print("unlinked $abs_path_f\n");
+
+        if (system('repo-add', $abs_path_f, @targets) == 0) {
+            $to_sync{basename($repo_list[0], ".db")}++;
+        } else {
+            print STDERR "repo-add failed: $?\n";
+        }
+    } elsif ($opt_d == 0) {
+        warn("warning: could not unlink $abs_path_f\n");
+    } elsif ($opt_d == 1) {
+        $to_sync{basename($repo_list[0], ".db")}++;
+
+        print("[DRY] unlink $abs_path_f\n");
+        print("[DRY] repo-add $abs_path_f " . join(" ", @targets) . "\n");
+    }
+} else { # XXX "default" remove mode
     for my $repo(@repo_list) {
         my @contents = `tar -tf $repo --exclude='*/*'`;
         chomp @contents;
@@ -225,6 +293,7 @@ if ($opt_a == 1) {
         warn("warning: $_ not found in cache\n");
     }
 
+    # disk updates
     for my $name(@keys_p) {
         for my $file(@{$packages{$name}}) {
             if ($opt_m == 1) {
@@ -248,6 +317,7 @@ if ($opt_a == 1) {
         }
     }
 
+    # database updates
     for my $name(@keys_r) {
         for my $path_f(@{$removals{$name}}) {
             my $abs_path_f = abs_path($path_f); # resolve symbolic link
@@ -278,39 +348,56 @@ if ($opt_a == 1) {
                 my $new_path = dirname($move_list[0]) . "/" . $target_pkg;
 
                 if ($opt_d == 0 && (-f $new_path)) {
-                    system('repo-add', $abs_path_t, $new_path)
-                        and $to_sync{basename($move_list[0], ".db")}++;
-                    system('repo-remove', $abs_path_f, $name)
-                        and $to_sync{basename($path_f, ".db")}++;
+                    if (system('repo-add', $abs_path_t, $new_path) == 0) {
+                        $to_sync{basename($move_list[0], ".db")}++;
+                    } else {
+                        print STDERR "repo-add failed: $?\n";
+                    }
+
+                    if (system('repo-remove', $abs_path_f, $name) == 0) {
+                        $to_sync{basename($path_f, ".db")}++;
+                    } else {
+                        print STDERR "repo-add failed: $?\n";
+                    }
                 } elsif ($opt_d == 0) {
                     warn("warning: could not find move target $new_path");
                 } elsif ($opt_d == 1) {
-                    print("[DRY] repo-add $abs_path_t $new_path\n");
-                    print("[DRY] repo-remove $abs_path_f $name\n");
-
                     $to_sync{basename($move_list[0], ".db")}++;
                     $to_sync{basename($path_f, ".db")}++;
+
+                    print("[DRY] repo-add $abs_path_t $new_path\n");
+                    print("[DRY] repo-remove $abs_path_f $name\n");
                 }
-            } elsif ($opt_d == 0) { # XXX "default" mode aur-remove
-                system('repo-remove', $abs_path_f, $name)
-                    and $to_sync{basename($path_f, ".db")}++;
+            } elsif ($opt_d == 0) { # XXX "default" mode remove
+                if (system('repo-remove', $abs_path_f, $name) == 0) {
+                    $to_sync{basename($path_f, ".db")}++;
+                } else {
+                    print STDERR "repo-add failed: $?\n";
+                }
             } elsif ($opt_d == 1) {
                 print("[DRY] repo-remove $abs_path_f $name\n");
             }
         }
     }
-} else {
-    die "$argv0: invalid mode";
 }
 
-my @keys_s = keys %to_sync;
+my @keys_s;
+for my $k(keys %to_sync) {
+    if ($to_sync{$k} == 0) {
+        print STDERR "repo-add failed for repository $k, ignoring\n";
+    } else {
+        push(@keys_s, $k);
+    }
+}
 if ($opt_d == 0 && $opt_s == 0) {
     for my $repo(@keys_s) {
         my $cmd = "pacsync " . $repo;
         print("note: database modified, run '" . $cmd . "' to reflect changes\n");
     }
 } elsif ($opt_d == 0 && $opt_s == 1) {
-    system('sudo', 'pacsync', @keys_s);
+    for my $s(@keys_s) {
+        system('sudo', 'pacsync', $s);
+    }
 } elsif ($opt_d == 1 && $opt_s == 1) {
     print("[DRY] pacsync " . join(" ", @keys_s) . "\n");
 }
