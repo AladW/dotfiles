@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-# -*- cperl-indent-level: 4; -*-
+#requires pacman-contrib pacutils pacman
 use strict;
 use warnings;
 
@@ -33,7 +33,7 @@ sub usage($) {
 # XXX expose repo-add -n/-p (--add)
 #     use hash with different options depending on mode/$0
 #     use generic name instead of "default" remove mode
-#     allow to specify local repo path directly (--root A --root B)
+#     allow to specify local repo path directly (--root <from> --root <to>)
 my $argv0 = basename($0);
 GetOptions('dryrun|print' => \$opt_d,
            'f|from=s' => \$opt_f,
@@ -43,14 +43,14 @@ GetOptions('dryrun|print' => \$opt_d,
            'c|config=s' => \$opt_c,
            'a|add' => \$opt_a,
            'm|move' => \$opt_m)
-     or usage($argv0);
+    or usage($argv0);
 
 usage($argv0)
-  if ($opt_h == 1);
+    if ($opt_h == 1);
 $opt_a = 1
-  if ($argv0 eq "aur-add");
+    if ($argv0 eq "aur-add");
 $opt_m = 1
-  if ($argv0 eq "aur-move");
+    if ($argv0 eq "aur-move");
 
 # XXX -t invalid option for aur-remove?
 if (length($opt_t) == 0 && $opt_a) {
@@ -125,7 +125,7 @@ sub repo_match_pkgname($$) {
 }
 
 if ($#ARGV < 0) {
-    print STDERR "$0: requires at least one package name\n";
+    print STDERR "$argv0: requires at least one package name\n";
     exit(1);
 }
 
@@ -152,164 +152,165 @@ die 'no file:// repository found (-f)'
 die 'no file:// repository found (-t)'
     unless scalar(@move_list) > 0 or $opt_t eq "";
 
-ADD:
-if ($opt_a) { # assumes single repository (--to)
+if ($opt_a == 1) {
     my @add_list;
     my @add_nval;
 
-    for my $arg(@ARGV) {
+    for my $arg (@ARGV) {
         if ($arg =~ /${pkgfile}$/ && (-f $arg)) {
             push(@add_list, $arg);
         } else {
+            print STDERR "invalid package: $arg\n";
             push(@add_nval, $arg);
         }
     }
+    my $db_name = basename($move_list[0], ".db");
+    $to_sync{$db_name} = 0;
 
     if (scalar(@add_nval) > 0) {
-        die "invalid package specified";
+        die "invalid packages specified";
     } else {
-        for my $pkg(@add_list) {
+        for my $pkg (@add_list) {
             my $move_target = dirname($move_list[0]);
 
-            if ($opt_d == 0) {
-                if (move($pkg, $move_target)) {
-                    system('repo-add', abs_path($move_list[0]), $move_target . "/" . $pkg);
-
-                    my $db_name = basename($move_list[0], ".db");
-                    $to_sync{$db_name} = 1;
-                } else {
-                    warn("warning: could not move $pkg to $move_target\n");
-                    warn("warning: repo-add was not run for $pkg\n");
+            # XXX Support adding a package to multiple repositories?
+            if ($opt_d == 0 && move($pkg, $move_target)) {
+                if (system('repo-add', abs_path($move_list[0]), $move_target . "/" . $pkg)) {
+                    $to_sync{$db_name}++;
                 }
-            } else {
+            } elsif ($opt_d == 0) {
+                warn("warning: could not move $pkg to $move_target\n");
+                warn("warning: repo-add was not run for $pkg\n");
+            } elsif ($opt_d == 1) {
                 print("[DRY] mv $pkg " . $move_target . "\n");
                 print("[DRY] repo-add " . abs_path($move_list[0]) . " " . $pkg . "\n");
-            }
-        }
-        goto DB_UPGRADE;
-    }
-}
 
-MOVE:
-for my $repo(@repo_list) {
-    my @contents = `tar -tf $repo --exclude='*/*'`;
-    chomp @contents;
-
-    for my $entry(@contents) {
-        $entry =~ s/\/$//; # remove trailing backslash
-
-        for my $needle(@ARGV) {
-            if (repo_match_pkgname($entry, $needle)) {
-                push(@{$removals{$needle}}, abs_path($repo));
-
-                my $db_name = basename($repo, ".db");
-                $to_sync{$db_name} = 1
-                    unless exists $to_sync{$db_name};
+                $to_sync{$db_name}++;
             }
         }
     }
-    find(sub {
+} elsif ($opt_a == 0) {
+    for my $repo(@repo_list) {
+        my @contents = `tar -tf $repo --exclude='*/*'`;
+        chomp @contents;
+
+        for my $entry(@contents) {
+            $entry =~ s/\/$//; # remove trailing backslash
+
+            for my $needle(@ARGV) {
+                if (repo_match_pkgname($entry, $needle)) {
+                    push(@{$removals{$needle}}, $repo);
+
+                    my $db_name = basename($repo, ".db");
+                    $to_sync{$db_name} = 0;
+                }
+            }
+        }
+        find(sub {
             return unless -f;
             for my $needle(@ARGV) {
                 if (file_match_pkgname($_, $needle)) {
                     push(@{$packages{$needle}}, $File::Find::name); # store full path
                 }
             }
-        }, dirname($repo)
-    );
-}
-my @keys_r = keys %removals;
-my @keys_p = keys %packages;
+        }, dirname($repo));
+    }
+    my @keys_r = keys %removals;
+    my @keys_p = keys %packages;
 
-for(array_minus(@ARGV, @keys_r)) {
-    warn("warning: $_ not found in database\n");
-}
-for(array_minus(@ARGV, @keys_p)) {
-    warn("warning: $_ not found in cache\n");
-}
+    for(array_minus(@ARGV, @keys_r)) {
+        warn("warning: $_ not found in database\n");
+    }
+    for(array_minus(@ARGV, @keys_p)) {
+        warn("warning: $_ not found in cache\n");
+    }
 
-MOVE_DISK:
-for my $name(@keys_p) {
-    for my $file(@{$packages{$name}}) {
-        if ($opt_m == 1) {
-            # XXX move to multiple repositories?
-            my $move_target = dirname($move_list[0]);
+    for my $name(@keys_p) {
+        for my $file(@{$packages{$name}}) {
+            if ($opt_m == 1) {
+                # XXX move to multiple repositories?
+                my $move_target = dirname($move_list[0]);
 
-            if ($opt_d == 0 && move($file, $move_target)) {
-                print("moved $file to " . $move_target . "\n");
+                if ($opt_d == 0 && move($file, $move_target)) {
+                    print("moved $file to " . $move_target . "\n");
+                } elsif ($opt_d == 0) {
+                    warn("warning: could not move $file to $move_target\n");
+                } elsif ($opt_d == 1) {
+                    print("[DRY] mv $file " . dirname($move_list[0]) . "\n");
+                }
+            } elsif ($opt_d == 0 && unlink $file) {
+                print("unlinked $file\n");
             } elsif ($opt_d == 0) {
-                warn("warning: could not move $file to $move_target\n");
-            } else {
-                print("[DRY] mv $file " . dirname($move_list[0]) . "\n");
+                warn("warning: could not unlink $file\n");
+            } elsif ($opt_d == 1) {
+                print("[DRY] unlink $file\n");
             }
-        } elsif ($opt_d == 0 && unlink $file) {
-            print("unlinked $file\n");
-        } elsif ($opt_d == 0) {
-            warn("warning: could not unlink $file\n");
-        } else {
-            print("[DRY] unlink $file\n");
         }
     }
-}
 
-MOVE_DB:
-for my $name(@keys_r) {
-    for my $path(@{$removals{$name}}) {
-        if ($opt_m == 1) {
-            my $target_pkg;
-            my @packages;
+    for my $name(@keys_r) {
+        for my $path_f(@{$removals{$name}}) {
+            my $abs_path_f = abs_path($path_f); # resolve symbolic link
 
-            if (defined $packages{$name}) {
-                @packages = @{$packages{$name}};
-            } else {
-                die "package list empty";
+            if ($opt_m == 1) {
+                my $target_pkg;
+                my @packages;
+
+                if (defined $packages{$name}) {
+                    @packages = @{$packages{$name}};
+                } else {
+                    die "package list empty";
+                }
+
+                if (scalar(@packages) > 1) {
+                    my ($fh, $filename) = tempfile();
+                    print $fh join("\n", @packages);
+
+                    my @sorted_pkg = `pacsort -r $filename` or die "pacsort: $!";
+                    chomp(@sorted_pkg);
+
+                    close($fh);
+                    $target_pkg = basename($sorted_pkg[0]);
+                } else {
+                    $target_pkg = basename($packages[0]);
+                }
+                my $abs_path_t = abs_path($move_list[0]);
+                my $new_path = dirname($move_list[0]) . "/" . $target_pkg;
+
+                if ($opt_d == 0 && (-f $new_path)) {
+                    system('repo-add', $abs_path_t, $new_path)
+                        and $to_sync{basename($move_list[0], ".db")}++;
+                    system('repo-remove', $abs_path_f, $name)
+                        and $to_sync{basename($path_f, ".db")}++;
+                } elsif ($opt_d == 0) {
+                    warn("warning: could not find move target $new_path");
+                } elsif ($opt_d == 1) {
+                    print("[DRY] repo-add $abs_path_t $new_path\n");
+                    print("[DRY] repo-remove $abs_path_f $name\n");
+
+                    $to_sync{basename($move_list[0], ".db")}++;
+                    $to_sync{basename($path_f, ".db")}++;
+                }
+            } elsif ($opt_d == 0) { # XXX "default" mode aur-remove
+                system('repo-remove', $abs_path_f, $name)
+                    and $to_sync{basename($path_f, ".db")}++;
+            } elsif ($opt_d == 1) {
+                print("[DRY] repo-remove $abs_path_f $name\n");
             }
-
-            if (scalar(@packages) > 1) {
-                my ($fh, $filename) = tempfile();
-                print $fh join("\n", @packages);
-
-                my @sorted_pkg = `pacsort -r $filename` or die "pacsort: $!";
-                chomp(@sorted_pkg);
-
-                close($fh);
-                $target_pkg = basename($sorted_pkg[0]);
-            } else {
-                $target_pkg = basename($packages[0]);
-            }
-            my $new_path = dirname($move_list[0]) . "/" . $target_pkg;
-
-            if ($opt_d == 0) {
-                # XXX only add file if $new_path exists, check repo-add exit status
-                system('repo-add', abs_path($move_list[0]), $new_path);
-                system('repo-remove', $path, $name);
-
-                $to_sync{basename($move_list[0], ".db")} = 1;
-            } else {
-                print("[DRY] repo-add " . abs_path($move_list[0]) . " " . $new_path . "\n");
-                print("[DRY] repo-remove $path $name\n");
-            }
-        } elsif ($opt_d == 0) {
-            system('repo-remove', $path, $name);
-        } else {
-            print("[DRY] repo-remove $path $name\n");
         }
     }
+} else {
+    die "$argv0: invalid mode";
 }
 
-DB_UPGRADE:
 my @keys_s = keys %to_sync;
 if ($opt_d == 0 && $opt_s == 0) {
     for my $repo(@keys_s) {
         my $cmd = "pacsync " . $repo;
         print("note: database modified, run '" . $cmd . "' to reflect changes\n");
     }
-} elsif ($opt_d == 0) {
-    for my $repo(@keys_s) {
-        system('sudo', 'pacsync', $repo); # XXX "or" is triggered here, even on correct update
-    }
-} elsif ($opt_s == 1) {
-    for my $repo(@keys_s) {
-        print("[DRY] pacsync " . $repo . "\n");
-    }
+} elsif ($opt_d == 0 && $opt_s == 1) {
+    system('sudo', 'pacsync', @keys_s);
+} elsif ($opt_d == 1 && $opt_s == 1) {
+    print("[DRY] pacsync " . join(" ", @keys_s) . "\n");
 }
