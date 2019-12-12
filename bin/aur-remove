@@ -20,17 +20,14 @@ my $opt_a = 0;
 my $opt_m = 0;
 my $opt_R = 0;
 
-sub usage($) {
-    if ($_[0] eq "aur-remove") {
-        print STDERR "Usage: $_[0] [--dry] [-f from...] [--] pkgname [pkgname...]\n";
-    } elsif ($_[0] eq "aur-move") {
-        print STDERR "Usage: $_[0] [--dry] [-f from] [-t to] [--] pkgname [pkgname...]\n";
-    } elsif ($_[0] eq "aur-add") {
-        print STDERR "Usage: $_[0] [--dry] [-t to] [--] package [package...]\n";
-    } elsif ($_[0] eq "aur-reset") {
-        print STDERR "Usage: $_[0] [--dry] [-f from...]\n";
-    }
-    exit(1);
+sub usage() {
+    print <<"EOF";
+Usage: $0 [--dry] [-f from...] pkgname [pkgname...]
+       $0 --move  [-f from] [-t to] pkgname [pkgname...]
+       $0 --add   [-t to] package [package...]
+       $0 --reset [-f from]
+EOF
+    exit(1)
 }
 
 # XXX expose repo-add -n/-p (--add)
@@ -47,33 +44,30 @@ GetOptions('dryrun|print' => \$opt_d,
            'a|add' => \$opt_a,
            'm|move' => \$opt_m,
            'R|reset' => \$opt_R)
-    or usage($argv0);
+    or usage();
 
-usage($argv0)
+usage()
     if ($opt_h == 1);
-$opt_a = 1
-    if ($argv0 eq "aur-add");
-$opt_m = 1
-    if ($argv0 eq "aur-move");
-$opt_R = 1
-    if ($argv0 eq "aur-reset");
+$opt_a = 1 if ($argv0 eq "aur-add");
+$opt_m = 1 if ($argv0 eq "aur-move");
+$opt_R = 1 if ($argv0 eq "aur-reset");
 
 # XXX -t invalid option for aur-remove?
 if (length($opt_t) == 0 && $opt_a) {
     print STDERR "--add requires a target (-t) repository\n";
-    usage($argv0);
+    usage();
 } elsif (length($opt_f) == 0 && $opt_R) {
     print STDERR "--reset requires a source (-f) repository\n";
-    usage($argv0);
+    usage();
 } elsif (length($opt_f) > 0 && $opt_a) {
     print STDERR "--add cannot be used with a source (-f) repository\n";
-    usage($argv0);
+    usage();
 } elsif (length($opt_t) == 0 && $opt_m == 1) {
     print STDERR "--move requires both a source (-f) and target (-t)\n";
-    usage($argv0);
+    usage();
 } elsif (length($opt_t) > 0 && length($opt_f) == 0 && $opt_a == 0) {
     print STDERR "--move requires both a source (-f) and target (-t)\n";
-    usage($argv0);
+    usage();
 } elsif (not -e $opt_c) {
     print STDERR "$opt_c: file is not readable\n";
     exit(1);
@@ -188,7 +182,7 @@ if ($opt_a == 1) {
                 if (system('repo-add', $abs_path_t, $move_target . "/" . $pkg) == 0) {
                     $to_sync{$db_name}++;
                 } else {
-                    print STDERR "repo-add failed: $?\n";
+                    print STDERR "repo-add failed: " . $? << 8 . "\n";
                 }
             } elsif ($opt_d == 0) {
                 warn("warning: could not move $pkg to $move_target\n");
@@ -217,45 +211,55 @@ if ($opt_a == 1) {
     }, dirname($repo_list[0]));
 
     my @sorted;
+    my %names;
+    my @targets;
+
     if (scalar(keys %candidates) > 0) {
         my ($fh, $filename) = tempfile();
         for my $pkg(keys %candidates) {
             print $fh "$pkg\n";
         }
-
         @sorted = `pacsort -r $filename` or die "pacsort: $!";
         close($fh);
+
         chomp(@sorted);
+        for my $pkg(@sorted) {
+            my $name = $candidates{$pkg};
+
+            push(@targets, $pkg)
+                unless exists $names{$name};
+            $names{$name} = 1;
+        }
     } else {
-        die "$argv0: no packages found";
+        warn("warning: no packages found, running repo-add without package arguments");
     }
-    my %names;
-    my @targets;
+    my $path = $repo_list[0];
+    my $abs_path = abs_path($path);
 
-    for my $pkg(@sorted) {
-        my $name = $candidates{$pkg};
-
-        push(@targets, $pkg)
-            unless exists $names{$name};
-        $names{$name} = 1;
+    if ($path eq $abs_path) {
+        warn("warning: could not resolve symbolic link, assuming .tar.gz");
+        $abs_path = "$path.tar.gz";
     }
-    my $abs_path_f = abs_path($repo_list[0]);
 
-    if ($opt_d == 0 && unlink $abs_path_f) {
-        print("unlinked $abs_path_f\n");
+    if ($opt_d == 0) {
+        if (-f $abs_path && unlink $abs_path) {
+            print("unlinked $abs_path\n");
+        } elsif (-f $abs_path) {
+            warn("warning: could not unlink $abs_path\n");
+        }
 
-        if (system('repo-add', $abs_path_f, @targets) == 0) {
+        if (system('repo-add', $abs_path, @targets) == 0) {
             $to_sync{basename($repo_list[0], ".db")}++;
         } else {
-            print STDERR "repo-add failed: $?\n";
+            print STDERR "repo-add failed: " . $? >> 8 . "\n";
         }
-    } elsif ($opt_d == 0) {
-        warn("warning: could not unlink $abs_path_f\n");
     } elsif ($opt_d == 1) {
         $to_sync{basename($repo_list[0], ".db")}++;
 
-        print("[DRY] unlink $abs_path_f\n");
-        print("[DRY] repo-add $abs_path_f " . join(" ", @targets) . "\n");
+        if (-f $abs_path) {
+            print("[DRY] unlink $abs_path\n");
+        }
+        print("[DRY] repo-add $abs_path " . join(" ", @targets) . "\n");
     }
 } else { # XXX "default" remove mode
     for my $repo(@repo_list) {
@@ -351,13 +355,13 @@ if ($opt_a == 1) {
                     if (system('repo-add', $abs_path_t, $new_path) == 0) {
                         $to_sync{basename($move_list[0], ".db")}++;
                     } else {
-                        print STDERR "repo-add failed: $?\n";
+                        print STDERR "repo-add failed: " . $? >> 8 . "\n";
                     }
 
                     if (system('repo-remove', $abs_path_f, $name) == 0) {
                         $to_sync{basename($path_f, ".db")}++;
                     } else {
-                        print STDERR "repo-add failed: $?\n";
+                        print STDERR "repo-add failed: " . $? >> 8 . "\n";
                     }
                 } elsif ($opt_d == 0) {
                     warn("warning: could not find move target $new_path");
@@ -372,7 +376,7 @@ if ($opt_a == 1) {
                 if (system('repo-remove', $abs_path_f, $name) == 0) {
                     $to_sync{basename($path_f, ".db")}++;
                 } else {
-                    print STDERR "repo-add failed: $?\n";
+                    print STDERR "repo-add failed: " . $? >> 8 . "\n";
                 }
             } elsif ($opt_d == 1) {
                 print("[DRY] repo-remove $abs_path_f $name\n");
@@ -384,7 +388,7 @@ if ($opt_a == 1) {
 my @keys_s;
 for my $k(keys %to_sync) {
     if ($to_sync{$k} == 0) {
-        print STDERR "repo-add failed for repository $k, ignoring\n";
+        print STDERR "failed to modify database $k, ignoring\n";
     } else {
         push(@keys_s, $k);
     }
