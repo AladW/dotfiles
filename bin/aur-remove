@@ -1,4 +1,5 @@
 #!/usr/bin/env perl
+# -*- cperl-indent-level: 4; -*-
 use strict;
 use warnings;
 
@@ -14,26 +15,59 @@ my $opt_h = 0;
 my $opt_f = "";
 my $opt_t = "";
 my $opt_s = 0;
+my $opt_c = "/etc/pacman.conf";
+my $opt_a = 0;
+my $opt_m = 0;
 
-sub usage() {
-    print STDERR "Usage: remove [-d] [-f from] [-t to] [--] pkgname [pkgname...]\n";
+sub usage($) {
+    my $argv0 = basename($_[0]);
+
+    if ($argv0 eq "aur-remove") {
+        print STDERR "Usage: $argv0 [--dry] [-f from] [--] pkgname [pkgname...]\n";
+    } elsif ($argv0 eq "aur-move") {
+        print STDERR "Usage: $argv0 [--dry] [-f from] [-t to] [--] pkgname [pkgname...]\n";
+    } elsif ($argv0 eq "aur-add") {
+        print STDERR "Usage: $argv0 [--dry] [-t to] [--] package [package...]\n";
+    }
     exit(1);
 }
-GetOptions('d|dryrun|print' => \$opt_d,
-           'f|from=s' => \$opt_f,
-           'h|help'   => \$opt_h,
-           't|to=s'   => \$opt_t,
-           's|sync'   => \$opt_s)
-     or usage();
-usage() if ($opt_h == 1);
 
-if (length($opt_t) == 0 && (basename($0) eq "aur-move")) {
-  print STDERR "--move requires both a source (-f) and target (-t)\n";
-  usage();
-}
-if (length($opt_t) > 1 && length($opt_f) == 0) {
-  print STDERR "--move requires both a source (-f) and target (-t)\n";
-  usage();
+# XXX expose repo-add -n/-p (--add)
+#     use hash with different options depending on mode/$0
+#     use generic name instead of "default" remove mode
+#     allow to specify local repo path directly (--root A --root B)
+GetOptions('dryrun|print' => \$opt_d,
+           'f|from=s' => \$opt_f,
+           'h|help' => \$opt_h,
+           't|to=s' => \$opt_t,
+           's|sync' => \$opt_s,
+           'c|config=s' => \$opt_c,
+           'a|add' => \$opt_a,
+           'm|move' => \$opt_m)
+     or usage($0);
+usage($0)
+  if ($opt_h == 1);
+$opt_a = 1
+  if (basename($0) eq "aur-add");
+$opt_m = 1
+  if (basename($0) eq "aur-move");
+
+# XXX -t invalid option for aur-remove?
+if (length($opt_t) == 0 && $opt_a) {
+    print STDERR "--add requires a target (-t) repository\n";
+    usage($0);
+} elsif (length($opt_f) > 0 && $opt_a) {
+    print STDERR "--add cannot be used with a source (-f) repository\n";
+    usage($0);
+} elsif (length($opt_t) == 0 && $opt_m == 1) {
+    print STDERR "--move requires both a source (-f) and target (-t)\n";
+    usage($0);
+} elsif (length($opt_t) > 1 && length($opt_f) == 0 && $opt_a == 0) {
+    print STDERR "--move requires both a source (-f) and target (-t)\n";
+    usage($0);
+} elsif (not -e $opt_c) {
+    print STDERR "$opt_c: file is not readable\n";
+    exit(1);
 }
 
 # https://metacpan.org/source/ZMIJ/Array-Utils-0.5/Utils.pm
@@ -44,9 +78,12 @@ sub array_minus(\@\@) {
 
 sub local_repo_path($) {
     my $repo = $_[0];
-    my @list = `pacconf --repo=$repo Server` or die;
-    chomp(@list);
+    my $pacman_conf = $opt_c;
+
+    my @list = `pacconf --config=$pacman_conf --repo=$repo Server`
+        or die "pacconf: $!";
     my @paths;
+    chomp(@list);
 
     for my $serv(@list) {
         if ($serv =~ /^file:\/\//) {
@@ -58,7 +95,10 @@ sub local_repo_path($) {
 }
 
 sub local_repo_list() {
-    my @list = `pacconf --repo-list` or die;
+    my $pacman_conf = $opt_c;
+
+    my @list = `pacconf --config=$pacman_conf --repo-list`
+        or die "pacconf: $!";
     my @list_local;
     chomp @list;
 
@@ -75,16 +115,17 @@ sub local_repo_list() {
 
 # PKGBUILD(5)
 my $pkgspec = qr/((?=[^\-\.])[\w\-@\.\+]+)\-(\d:)?([^:\/\-\s]+)\-(\d+(\.\d+)?)/;
+my $pkgfile = qr/${pkgspec}\-(\w+)(\.pkg\.tar)(\.\w+)?/;
 
 sub file_match_pkgname($$) {
-    return $_[0] =~ /${pkgspec}\-(\w+)(\.pkg\.tar)(\.\w+)?$/ && $1 eq $_[1];
+    return $_[0] =~ /${pkgfile}$/ && $1 eq $_[1];
 }
 sub repo_match_pkgname($$) {
-    return $_[0] =~ /${pkgspec}\/$/ && $1 eq $_[1];
+    return $_[0] =~ /${pkgspec}$/ && $1 eq $_[1];
 }
 
 if ($#ARGV < 0) {
-    print STDERR "remove: requires at least one package name\n";
+    print STDERR "$0: requires at least one package name\n";
     exit(1);
 }
 
@@ -94,27 +135,70 @@ my @repo_list;
 my @move_list;
 my %to_sync;
 
+if (length($opt_t) > 1) {
+    @move_list = local_repo_path($opt_t);
+}
 if (length($opt_f) > 1) {
     @repo_list = local_repo_path($opt_f);
-    if (length($opt_t) > 1) {
-        @move_list = local_repo_path($opt_t);
-    }
 } else {
     @repo_list = local_repo_list();
 }
+
 chomp @repo_list;
 chomp @move_list;
 
 die 'no file:// repository found (-f)'
     unless scalar(@repo_list) > 0;
-die 'no file:// repository found (-m)'
+# XXX use explicit mode instead of implicit population of @move_list
+die 'no file:// repository found (-t)'
     unless scalar(@move_list) > 0 or $opt_t eq "";
 
+ADD:
+if ($opt_a) { # assumes single repository (--to)
+    my @add_list;
+    my @add_nval;
+
+    for my $arg(@ARGV) {
+        if ($arg =~ /${pkgfile}$/ && (-f $arg)) {
+            push(@add_list, $arg);
+        } else {
+            push(@add_nval, $arg);
+        }
+    }
+
+    if (scalar(@add_nval) > 0) {
+        die "invalid package specified";
+    } else {
+        for my $pkg(@add_list) {
+            my $move_target = dirname($move_list[0]);
+
+            if ($opt_d == 0) {
+                if (move($pkg, $move_target)) {
+                    system('repo-add', abs_path($move_list[0]), $move_target . "/" . $pkg);
+
+                    my $db_name = basename($move_list[0], ".db");
+                    $to_sync{$db_name} = 1;
+                } else {
+                    warn("warning: could not move $pkg to $move_target\n");
+                    warn("warning: repo-add was not run for $pkg\n");
+                }
+            } else {
+                print("[DRY] mv $pkg " . $move_target . "\n");
+                print("[DRY] repo-add " . abs_path($move_list[0]) . " " . $pkg . "\n");
+            }
+        }
+        goto DB_UPGRADE;
+    }
+}
+
+MOVE:
 for my $repo(@repo_list) {
     my @contents = `tar -tf $repo --exclude='*/*'`;
     chomp @contents;
 
     for my $entry(@contents) {
+        $entry =~ s/\/$//; # remove trailing backslash
+
         for my $needle(@ARGV) {
             if (repo_match_pkgname($entry, $needle)) {
                 push(@{$removals{$needle}}, abs_path($repo));
@@ -145,9 +229,10 @@ for(array_minus(@ARGV, @keys_p)) {
     warn("warning: $_ not found in cache\n");
 }
 
-# (Re)move package files from disk
+MOVE_DISK:
 for my $name(@keys_p) {
     for my $file(@{$packages{$name}}) {
+        # XXX use explicit mode instead of implicit population of @move_list
         if (scalar(@move_list) > 0) {
             # XXX move to multiple repositories?
             my $move_target = dirname($move_list[0]);
@@ -169,9 +254,10 @@ for my $name(@keys_p) {
     }
 }
 
-# Update repository entries
+MOVE_DB:
 for my $name(@keys_r) {
     for my $path(@{$removals{$name}}) {
+        # XXX use explicit mode instead of implicit population of @move_list
         if (scalar(@move_list) > 0) {
             my $target_pkg;
             my @packages;
@@ -183,10 +269,6 @@ for my $name(@keys_r) {
             }
 
             if (scalar(@packages) > 1) {
-                # perl, in the typical fashion of a "real" programming
-                # language, is completely fucking useless when
-                # confronted with even the most trivial piping
-                # tasks. As such, leave it all to bash and tempfiles.
                 my ($fh, $filename) = tempfile();
                 print $fh join("\n", @packages);
 
@@ -201,7 +283,7 @@ for my $name(@keys_r) {
             my $new_path = dirname($move_list[0]) . "/" . $target_pkg;
 
             if ($opt_d == 0) {
-                # XXX only add file if $new_path exists
+                # XXX only add file if $new_path exists, check repo-add exit status
                 system('repo-add', abs_path($move_list[0]), $new_path);
                 system('repo-remove', $path, $name);
 
@@ -218,7 +300,7 @@ for my $name(@keys_r) {
     }
 }
 
-# Print suggested database upgrades
+DB_UPGRADE:
 my @keys_s = keys %to_sync;
 if ($opt_d == 0 && $opt_s == 0) {
     for my $repo(@keys_s) {
