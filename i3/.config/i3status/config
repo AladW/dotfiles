@@ -14,7 +14,7 @@ general {
 #order += "ipv6"
 order += "disk /"
 order += "run_watch DHCP"
-order += "wireless wlo1"
+order += "wireless wls3"
 order += "ethernet _first_"
 order += "volume master"
 order += "battery all"
@@ -29,7 +29,7 @@ volume master {
 	mixer_idx = 0
 }
 
-wireless wlo1 {
+wireless wls3 {
         format_up = "W: (%quality at %essid) %ip"
         format_down = "W: down"
 }

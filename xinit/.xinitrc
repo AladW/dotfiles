@@ -33,11 +33,11 @@ elif [ -f /usr/lib/qt/plugins/platformthemes/libqt5ct.so ]; then
 fi
 
 # autostart (xdg)
+dex -a xfsettingsd.desktop
 dex -a blueman.desktop
 dex -a gnome-keyring-secrets.desktop
 dex -a nm-applet.desktop
 dex -a polkit-mate-authentication-agent-1.desktop
-dex -a xfsettingsd.desktop
 
 #1 disable PC speaker
 xset -b
