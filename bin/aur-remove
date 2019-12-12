@@ -21,11 +21,12 @@ my $opt_m = 0;
 my $opt_R = 0;
 
 sub usage() {
+    my $argv0 = basename($0);
     print <<"EOF";
-Usage: $0 [--dry] [-f from...] pkgname [pkgname...]
-       $0 --move  [-f from] [-t to] pkgname [pkgname...]
-       $0 --add   [-t to] package [package...]
-       $0 --reset [-f from]
+Usage: $argv0 [--dry] [-f from...] pkgname [pkgname...]
+       $argv0 --move [-f from] [-t to] pkgname [pkgname...]
+       $argv0 --add [-t to] package [package...]
+       $argv0 --reset [-f from]
 EOF
     exit(1)
 }
@@ -59,14 +60,8 @@ if (length($opt_t) == 0 && $opt_a) {
 } elsif (length($opt_f) == 0 && $opt_R) {
     print STDERR "--reset requires a source (-f) repository\n";
     usage();
-} elsif (length($opt_f) > 0 && $opt_a) {
-    print STDERR "--add cannot be used with a source (-f) repository\n";
-    usage();
-} elsif (length($opt_t) == 0 && $opt_m == 1) {
-    print STDERR "--move requires both a source (-f) and target (-t)\n";
-    usage();
-} elsif (length($opt_t) > 0 && length($opt_f) == 0 && $opt_a == 0) {
-    print STDERR "--move requires both a source (-f) and target (-t)\n";
+} elsif ((length($opt_t) == 0 || length($opt_f)) && ($opt_m == 1)) {
+    print STDERR "--move requires both a source (-f) and target (-t) repository\n";
     usage();
 } elsif (not -e $opt_c) {
     print STDERR "$opt_c: file is not readable\n";
@@ -114,6 +109,19 @@ sub local_repo_list() {
         }
     }
     return @list_local;
+}
+
+sub update_database($$@) {
+    my $db_path = $_[1];
+    my @db_pkgs = $_[2];
+    my @command = ($_[0], $db_path, @db_pkgs);
+
+    if (system(@command) != 0) {
+        my $exit = $? >> 8;
+        warn("warning: " . join(" ", @command) . " failed: exit $exit");
+        return undef;
+    }
+    return 1;
 }
 
 # PKGBUILD(5)
@@ -179,19 +187,16 @@ if ($opt_a == 1) {
 
             # XXX Support adding a package to multiple repositories?
             if ($opt_d == 0 && move($pkg, $move_target)) {
-                if (system('repo-add', $abs_path_t, $move_target . "/" . $pkg) == 0) {
+                if (update_database('repo-add', $abs_path_t, $move_target . "/" . $pkg)) {
                     $to_sync{$db_name}++;
-                } else {
-                    print STDERR "repo-add failed: " . $? << 8 . "\n";
                 }
             } elsif ($opt_d == 0) {
                 warn("warning: could not move $pkg to $move_target\n");
                 warn("warning: repo-add was not run for $pkg\n");
             } elsif ($opt_d == 1) {
+                $to_sync{$db_name}++;
                 print("[DRY] mv $pkg " . $move_target . "\n");
                 print("[DRY] repo-add " . abs_path($move_list[0]) . " " . $pkg . "\n");
-
-                $to_sync{$db_name}++;
             }
         }
     }
@@ -248,17 +253,13 @@ if ($opt_a == 1) {
             warn("warning: could not unlink $abs_path\n");
         }
 
-        if (system('repo-add', $abs_path, @targets) == 0) {
+        if (update_database('repo-add', $abs_path, @targets)) {
             $to_sync{basename($repo_list[0], ".db")}++;
-        } else {
-            print STDERR "repo-add failed: " . $? >> 8 . "\n";
         }
     } elsif ($opt_d == 1) {
         $to_sync{basename($repo_list[0], ".db")}++;
 
-        if (-f $abs_path) {
-            print("[DRY] unlink $abs_path\n");
-        }
+        print("[DRY] unlink $abs_path\n") if -f $abs_path;
         print("[DRY] repo-add $abs_path " . join(" ", @targets) . "\n");
     }
 } else { # XXX "default" remove mode
@@ -352,34 +353,28 @@ if ($opt_a == 1) {
                 my $new_path = dirname($move_list[0]) . "/" . $target_pkg;
 
                 if ($opt_d == 0 && (-f $new_path)) {
-                    if (system('repo-add', $abs_path_t, $new_path) == 0) {
+                    if (update_database('repo-add', $abs_path_t, $new_path)) {
                         $to_sync{basename($move_list[0], ".db")}++;
-                    } else {
-                        print STDERR "repo-add failed: " . $? >> 8 . "\n";
                     }
-
-                    if (system('repo-remove', $abs_path_f, $name) == 0) {
+                    if (update_database('repo-remove', $abs_path_f, $name)) {
                         $to_sync{basename($path_f, ".db")}++;
-                    } else {
-                        print STDERR "repo-add failed: " . $? >> 8 . "\n";
                     }
                 } elsif ($opt_d == 0) {
                     warn("warning: could not find move target $new_path");
                 } elsif ($opt_d == 1) {
-                    $to_sync{basename($move_list[0], ".db")}++;
-                    $to_sync{basename($path_f, ".db")}++;
-
                     print("[DRY] repo-add $abs_path_t $new_path\n");
                     print("[DRY] repo-remove $abs_path_f $name\n");
+
+                    $to_sync{basename($move_list[0], ".db")}++;
+                    $to_sync{basename($path_f, ".db")}++;
                 }
             } elsif ($opt_d == 0) { # XXX "default" mode remove
-                if (system('repo-remove', $abs_path_f, $name) == 0) {
+                if (update_database('repo-remove', $abs_path_f, $name)) {
                     $to_sync{basename($path_f, ".db")}++;
-                } else {
-                    print STDERR "repo-add failed: " . $? >> 8 . "\n";
                 }
             } elsif ($opt_d == 1) {
                 print("[DRY] repo-remove $abs_path_f $name\n");
+                $to_sync{basename($path_f, ".db")}++;
             }
         }
     }
@@ -388,7 +383,7 @@ if ($opt_a == 1) {
 my @keys_s;
 for my $k(keys %to_sync) {
     if ($to_sync{$k} == 0) {
-        print STDERR "failed to modify database $k, ignoring\n";
+        warn("warning: failed to modify database '$k', ignoring for sync");
     } else {
         push(@keys_s, $k);
     }
