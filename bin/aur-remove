@@ -20,14 +20,12 @@ my $opt_a = 0;
 my $opt_m = 0;
 
 sub usage($) {
-    my $argv0 = basename($_[0]);
-
-    if ($argv0 eq "aur-remove") {
-        print STDERR "Usage: $argv0 [--dry] [-f from] [--] pkgname [pkgname...]\n";
-    } elsif ($argv0 eq "aur-move") {
-        print STDERR "Usage: $argv0 [--dry] [-f from] [-t to] [--] pkgname [pkgname...]\n";
-    } elsif ($argv0 eq "aur-add") {
-        print STDERR "Usage: $argv0 [--dry] [-t to] [--] package [package...]\n";
+    if ($_[0] eq "aur-remove") {
+        print STDERR "Usage: $_[0] [--dry] [-f from] [--] pkgname [pkgname...]\n";
+    } elsif ($_[0] eq "aur-move") {
+        print STDERR "Usage: $_[0] [--dry] [-f from] [-t to] [--] pkgname [pkgname...]\n";
+    } elsif ($_[0] eq "aur-add") {
+        print STDERR "Usage: $_[0] [--dry] [-t to] [--] package [package...]\n";
     }
     exit(1);
 }
@@ -36,6 +34,7 @@ sub usage($) {
 #     use hash with different options depending on mode/$0
 #     use generic name instead of "default" remove mode
 #     allow to specify local repo path directly (--root A --root B)
+my $argv0 = basename($0);
 GetOptions('dryrun|print' => \$opt_d,
            'f|from=s' => \$opt_f,
            'h|help' => \$opt_h,
@@ -44,27 +43,28 @@ GetOptions('dryrun|print' => \$opt_d,
            'c|config=s' => \$opt_c,
            'a|add' => \$opt_a,
            'm|move' => \$opt_m)
-     or usage($0);
-usage($0)
+     or usage($argv0);
+
+usage($argv0)
   if ($opt_h == 1);
 $opt_a = 1
-  if (basename($0) eq "aur-add");
+  if ($argv0 eq "aur-add");
 $opt_m = 1
-  if (basename($0) eq "aur-move");
+  if ($argv0 eq "aur-move");
 
 # XXX -t invalid option for aur-remove?
 if (length($opt_t) == 0 && $opt_a) {
     print STDERR "--add requires a target (-t) repository\n";
-    usage($0);
+    usage($argv0);
 } elsif (length($opt_f) > 0 && $opt_a) {
     print STDERR "--add cannot be used with a source (-f) repository\n";
-    usage($0);
+    usage($argv0);
 } elsif (length($opt_t) == 0 && $opt_m == 1) {
     print STDERR "--move requires both a source (-f) and target (-t)\n";
-    usage($0);
+    usage($argv0);
 } elsif (length($opt_t) > 1 && length($opt_f) == 0 && $opt_a == 0) {
     print STDERR "--move requires both a source (-f) and target (-t)\n";
-    usage($0);
+    usage($argv0);
 } elsif (not -e $opt_c) {
     print STDERR "$opt_c: file is not readable\n";
     exit(1);
@@ -149,7 +149,6 @@ chomp @move_list;
 
 die 'no file:// repository found (-f)'
     unless scalar(@repo_list) > 0;
-# XXX use explicit mode instead of implicit population of @move_list
 die 'no file:// repository found (-t)'
     unless scalar(@move_list) > 0 or $opt_t eq "";
 
@@ -232,8 +231,7 @@ for(array_minus(@ARGV, @keys_p)) {
 MOVE_DISK:
 for my $name(@keys_p) {
     for my $file(@{$packages{$name}}) {
-        # XXX use explicit mode instead of implicit population of @move_list
-        if (scalar(@move_list) > 0) {
+        if ($opt_m == 1) {
             # XXX move to multiple repositories?
             my $move_target = dirname($move_list[0]);
 
@@ -257,8 +255,7 @@ for my $name(@keys_p) {
 MOVE_DB:
 for my $name(@keys_r) {
     for my $path(@{$removals{$name}}) {
-        # XXX use explicit mode instead of implicit population of @move_list
-        if (scalar(@move_list) > 0) {
+        if ($opt_m == 1) {
             my $target_pkg;
             my @packages;
 
