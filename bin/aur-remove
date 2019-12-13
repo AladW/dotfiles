@@ -111,10 +111,8 @@ sub local_repo_list() {
     return @list_local;
 }
 
-sub update_database($$@) {
-    my $db_path = $_[1];
-    my @db_pkgs = $_[2];
-    my @command = ($_[0], $db_path, @db_pkgs);
+sub update_database($$\@) {
+    my @command = ($_[0], $_[1], @{$_[2]});
 
     if (system(@command) != 0) {
         my $exit = $? >> 8;
@@ -206,21 +204,23 @@ if ($opt_a == 1) {
         die "invalid packages specified";
     } else {
         my $abs_path_t = abs_path($move_list[0]);
+
         for my $pkg (@add_list) {
             my $move_target = dirname($move_list[0]);
+            my $target = $move_target . "/" . $pkg;
 
             # XXX Support adding a package to multiple repositories?
             if ($opt_d == 0 && move($pkg, $move_target)) {
-                if (update_database('repo-add', $abs_path_t, $move_target . "/" . $pkg)) {
+                if (update_database('repo-add', $abs_path_t, @{$target})) {
                     $to_sync{$db_name}++;
                 }
             } elsif ($opt_d == 0) {
                 warn("warning: could not move $pkg to $move_target\n");
                 warn("warning: repo-add was not run for $pkg\n");
             } elsif ($opt_d == 1) {
-                $to_sync{$db_name}++;
                 print("[DRY] mv $pkg " . $move_target . "\n");
-                print("[DRY] repo-add " . abs_path($move_list[0]) . " " . $pkg . "\n");
+                print("[DRY] repo-add $abs_path_t $target\n");
+                $to_sync{$db_name}++;
             }
         }
     }
@@ -378,10 +378,10 @@ if ($opt_a == 1) {
                 my $new_path = dirname($move_list[0]) . "/" . $target_pkg;
 
                 if ($opt_d == 0 && (-f $new_path)) {
-                    if (update_database('repo-add', $abs_path_t, $new_path)) {
+                    if (update_database('repo-add', $abs_path_t, @{$new_path})) {
                         $to_sync{basename($move_list[0], ".db")}++;
                     }
-                    if (update_database('repo-remove', $abs_path_f, $name)) {
+                    if (update_database('repo-remove', $abs_path_f, @{$name})) {
                         $to_sync{basename($path_f, ".db")}++;
                     }
                 } elsif ($opt_d == 0) {
@@ -394,7 +394,7 @@ if ($opt_a == 1) {
                     $to_sync{basename($path_f, ".db")}++;
                 }
             } elsif ($opt_d == 0) { # XXX "default" mode remove
-                if (update_database('repo-remove', $abs_path_f, $name)) {
+                if (update_database('repo-remove', $abs_path_f, @{$name})) {
                     $to_sync{basename($path_f, ".db")}++;
                 }
             } elsif ($opt_d == 1) {
