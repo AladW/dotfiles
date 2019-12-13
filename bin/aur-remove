@@ -60,7 +60,7 @@ if (length($opt_t) == 0 && $opt_a) {
 } elsif (length($opt_f) == 0 && $opt_R) {
     print STDERR "--reset requires a source (-f) repository\n";
     usage();
-} elsif ((length($opt_t) == 0 || length($opt_f)) && ($opt_m == 1)) {
+} elsif ((length($opt_t) == 0 || length($opt_f) == 0) && ($opt_m == 1)) {
     print STDERR "--move requires both a source (-f) and target (-t) repository\n";
     usage();
 } elsif (not -e $opt_c) {
