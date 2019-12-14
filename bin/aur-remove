@@ -10,6 +10,7 @@ use File::Find;
 use File::Temp 'tempfile';
 
 use Getopt::Long;
+my $argv0 = basename($0);
 my $opt_d = 0;
 my $opt_h = 0;
 my $opt_f = "";
@@ -21,7 +22,6 @@ my $opt_m = 0;
 my $opt_R = 0;
 
 sub usage() {
-    my $argv0 = basename($0);
     print <<"EOF";
 Usage: $argv0 [--dry] [-f from...] pkgname [pkgname...]
        $argv0 --move [-f from] [-t to] pkgname [pkgname...]
@@ -38,7 +38,6 @@ EOF
 #     allow adding package in repository root with only pkgname (add/addpkg)
 #     remove: add option to only remove database entries (cf. repo-remove normal operation)?
 #     add package/global state for counter of (successful) repo-add commands
-my $argv0 = basename($0);
 GetOptions('dryrun|print' => \$opt_d,
            'f|from=s' => \$opt_f,
            'h|help' => \$opt_h,
@@ -58,16 +57,16 @@ $opt_R = 1 if ($argv0 eq "aur-reset");
 
 # XXX -t invalid option for aur-remove? (possible confusion with -f)
 if (length($opt_t) == 0 && $opt_a) {
-    print STDERR "--add requires a target (-t) repository\n";
+    print STDERR "$argv0: --add requires a target (-t) repository\n";
     usage();
 } elsif (length($opt_f) == 0 && $opt_R) {
-    print STDERR "--reset requires a source (-f) repository\n";
+    print STDERR "$argv0: --reset requires a source (-f) repository\n";
     usage();
 } elsif ((length($opt_t) == 0 || length($opt_f) == 0) && $opt_m == 1) {
-    print STDERR "--move requires both a source (-f) and target (-t) repository\n";
+    print STDERR "$argv0: --move requires both a source (-f) and target (-t) repository\n";
     usage();
 } elsif (($opt_t eq $opt_f) && $opt_m == 1) {
-    print STDERR "--move requires different source (-f) and target (-t) repositories\n";
+    print STDERR "$argv0: --move requires different source (-f) and target (-t) repositories\n";
     usage();
 } elsif (not -e $opt_c) {
     print STDERR "$opt_c: file is not readable\n";
@@ -135,7 +134,7 @@ my $pkgfile = qr/${pkgspec}\-(\w+)(\.pkg\.tar)(\.\w+)?/;
 
 if ($#ARGV < 0 && not $opt_R) {
     print STDERR "$argv0: requires at least one package name\n";
-    exit(1);
+    usage();
 }
 
 # Working variables
@@ -270,6 +269,7 @@ if ($opt_a == 1) {
 } else { # XXX "default" remove mode
     for my $repo(@repo_list) {
         my @contents = `tar -tf $repo --exclude='*/*'`;
+        my $db_name = basename($repo, ".db");
         chomp @contents;
 
         for my $entry(@contents) {
@@ -278,8 +278,6 @@ if ($opt_a == 1) {
             for my $needle(@ARGV) {
                 if ($entry =~ /${pkgspec}$/ && $1 eq $needle) {
                     push(@{$removals{$needle}}, $repo);
-
-                    my $db_name = basename($repo, ".db");
                     $to_sync{$db_name} = 0;
                 }
             }
