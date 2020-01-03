@@ -65,4 +65,27 @@
 ;; flycheck
 (when (load "flycheck" t t)
   (global-flycheck-mode 1))
+;; ivy
+(ivy-mode 1)
 
+(put 'dired-find-alternate-file 'disabled nil)
+(custom-set-variables
+ ;; custom-set-variables was added by Custom.
+ ;; If you edit it by hand, you could mess it up, so be careful.
+ ;; Your init file should contain only one such instance.
+ ;; If there is more than one, they won't work right.
+ '(custom-enabled-themes (quote (leuven)))
+ '(custom-safe-themes
+   (quote
+    ("80ae3a89f1eca6fb94a525004f66b544e347c6f756aaafb728c7cdaef85ea1f5" default)))
+ '(ivy-mode t)
+ '(package-selected-packages
+   (quote
+    (emojify labburn-theme markdown-mode ivy ix latex-math-preview flymake-easy flycheck cmake-mode auctex)))
+ '(tool-bar-mode nil))
+(custom-set-faces
+ ;; custom-set-faces was added by Custom.
+ ;; If you edit it by hand, you could mess it up, so be careful.
+ ;; Your init file should contain only one such instance.
+ ;; If there is more than one, they won't work right.
+ )

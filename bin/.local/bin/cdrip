@@ -1,0 +1,220 @@
+#!/usr/bin/env rc
+# cdrip: rip and tag your CDs
+
+# CONFIGURATION
+#	Set the variable 'encoder' in $LOCALDIR^/cfg/cdrip/config
+#	or it will have the default value:
+#	encoder='Foobie Bletch <nobody@nowhere.com>'
+
+#	You may also write a function 'my_munge' to help whip titles into
+#	filenames, either in your config file or in tags (the latter if you
+#	suspect you'll need it only once)
+
+# LIMITATIONS
+#	Note that this script makes use of the fact that, within a given
+#	rc script, scope is global. Certain functions, such as tags2args,
+#	go around fiddling with variables in main. This is ugly, but
+#	it's also the easiest workaround I've found for the problem of passing
+#	strings around to functions without losing which are 'single arguments'
+#	vs. individual arguments.
+
+#	It also really sucks that this just uses plain shell for tagging rather
+#	than a proper DSL.
+
+#	You can't specify multiple artists for a single track on a compilation
+#	("multiartist") album
+
+#	The only thing you can specify per-track is artists
+
+fn main {
+	flag e + # Bail out if anything goes wrong
+	clutter=track00.cdda.wav # files to be cleaned up at the end
+
+	handle_args $*
+
+	if (~ $#flagr 0) {
+		cdparanoia -B
+	}
+
+	# Build the actual argument lists for opusenc
+	get_tags
+	get_config
+	comments=($comments 'encoded-by='^$"encoder)
+	enumerate
+
+	# Handle artists separately, for multiartist support
+	tags2args genres --genre $genres
+	tags2args comments --comment $comments
+
+	if (~ $flagm 1) {
+		tag_multiartist
+	}
+	if not {
+		tags2args artists --artist $artists
+		if (! ~ $#titles 1 || ! ~ $tracktotal 1 || ! ~ $#flagn 1) {
+			tag
+		}
+		if not {
+			tag_single_track_album
+		}
+	}
+
+	if (~ $#flagk 0) {
+		rm -f $clutter
+	}
+}
+
+fn enumerate {
+	if (~ $#flagn 0) {
+		flagn=1
+	}
+
+	if (~ $#tracktotal 0) {
+		tracktotal=`{calc $#titles + $flagn - 1}
+	}
+
+	if (! ~ $tracktotal 1) {
+		comments=($comments 'tracktotal='^$tracktotal)
+	}
+
+	filenumbers=`{seq -w $flagn $tracktotal}
+	filenumbers=$filenumbers(1-$#titles)
+	tracknumbers=`{seq $flagn `{calc $flagn + $#titles - 1}}
+}
+
+# For now, there are only two settings: encoder and the function
+# my_munge (the latter is defined below)
+fn get_config {
+	if (test -r $LOCALDIR^/cfg/cdrip/config) {
+		. $LOCALDIR^/cfg/cdrip/config
+	}
+	if (~ $encoder '') {
+		encoder='Foobie Bletch <nobody@nowhere.com>'
+	}
+
+}	
+
+# Take a number and a title and turn them into a filename and a wav file
+# $1: title; $2: wav number; $3: file number
+fn get_filenames {
+	if (~ $#* 1) {
+		filename=`{echo $titles | munge | my_munge}^.opus
+		wav=track01.cdda.wav
+	}
+	if not if (~ $#* 3) {
+		filename=$2^-^`{echo $1 | munge | my_munge}^.opus
+		wav=track^*$3^.cdda.wav
+		wav=$wav(1)
+	}
+	if not {
+		echo Error: get_filenames needs either 1 or 3 arguments >[1=2]
+		exit 1
+	}
+}
+
+# Actually get the album tags
+fn get_tags {
+	if (test -r tags) {
+		# not even -e will cause an exit on input file syntax error
+		. ./tags || exit 1
+	}
+	if not {
+		echo 'Error: could not find file ''tags'' in current directory' >[1=2]
+		exit 1
+	}
+}
+
+# Parse command-line arguments
+fn handle_args {
+	flagfmt='h,k,m,n first_number,r'
+	args='
+	-h: print help
+	-k: keep clutter; do not delete .wav files after encoding
+	-m: Multiartist compilation album
+	-n: Begin numbering with given number
+	-r: no rip; tag only'
+
+	if (! ifs=() eval `{getflags $*}) {
+		usage
+		exit 1
+	}
+	if (~ $flagh 1) {
+		usage >[2=1]
+		exit
+	}
+}
+
+# munge: Translate titles to filenames.
+fn munge {
+	sed 's, ,_,g
+		s,_\((.*)\),--\1,
+		s,_\((.*)\),--\1,
+		s,_?/_?,--,g
+		s,_-_,-,g
+		s,_\[(.*)\]$,--\1,
+		s,_\[(.*)\]_,--\1--,g
+		s,[\[\]],,g
+		s,_~_,--,g
+		s,&,and,g
+		s,#,№,g
+		s/[?!$]//g
+	'
+}
+
+# my_munge: to be redefined in user config
+fn my_munge {
+	cat
+}
+
+fn tag {
+	for (i in `{seq 1 $#titles}) {
+		get_filenames $titles($i) $filenumbers($i) $i
+		echo Encoding $wav → $filename
+		opusenc $artists $genres $comments \
+			--album $album \
+			--title $titles($i) \
+			--date $date \
+			--comment 'tracknumber='^$filenumbers($i) \
+			$wav $filename && clutter=($clutter $wav)
+	}
+}
+
+fn tag_multiartist {
+	if (! ~ $#artists $#titles) {
+		echo Error: number of titles and artists does not match >[1=2]
+		exit 1
+	}
+	for (i in `{seq 1 $#titles}) {
+		get_filenames $titles($i) $filenumbers($i) $i
+		echo Encoding $wav → $filename
+		opusenc --artist $artists($i) $genres $comments \
+			--album $album \
+			--title $titles($i) \
+			--date $date \
+			--comment 'tracknumber='^$filenumbers($i) \
+			$wav $filename && clutter=($clutter $wav)
+	}
+}
+
+fn tag_single_track_album {
+	get_filenames $titles
+	echo Encoding $wav → $filename
+	opusenc $artists $genres $comments \
+		--album $album \
+		--title $titles \
+		--date $date \
+		$wav $filename && clutter=($clutter $wav)
+}
+
+# tags2args: take a list of tags and turn them into an argument list
+# opusenc will accept
+# $1: name of var in main; $2: opusenc flag; $3: list of tags
+fn tags2args {
+	is=() # vars are static, so accumulators must be zeroed before reuse
+	for (i in $*(3-)) {
+		is=($is $2 ''''^$i^'''')
+	}
+	eval `{printf '%s=(%s)\n' $1 $"is}
+}
+
+main $*

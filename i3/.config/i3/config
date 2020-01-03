@@ -245,6 +245,7 @@ for_window [class="Nm-connection-editor"] floating enable
 for_window [class="Pavucontrol"] floating enable
 for_window [class="Pybgsetter"] floating enable
 for_window [class="Seahorse"] floating enable
+for_window [class="System-config-printer.py"] floating enable
 for_window [class="Thunderbird" instance="Msgcompose"] floating enable
 for_window [class="Viewnior"] floating enable
 for_window [class="Xarchiver"] floating enable

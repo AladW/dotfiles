@@ -1,0 +1,24 @@
+#!/bin/bash
+# requires: wmctrl seturgent
+unset recipient astroid_args astroid_winid
+while getopts :m: OPT; do
+    case $OPT in
+	m) recipient="$OPTARG" ;;
+	*) true
+    esac
+done
+shift $(( OPTIND - 1 ))
+OPTIND=1
+
+astroid_args=("$@")
+if [[ -v recipient ]]; then
+    astroid_args+=(--mailto "$recipient")
+fi
+
+# set urgency hint for existing instance
+astroid_winid=$(wmctrl -lx | grep -w astroid.Astroid | awk '{print $1}')
+if [[ $astroid_winid ]]; then
+    seturgent "$astroid_winid" 1
+fi
+
+exec astroid "${astroid_args[@]}"

@@ -1,0 +1,84 @@
+#!/usr/bin/bash
+# requires: asp package-query svn ssh
+argv0=community2aur
+arch=x86_64
+PS4='+(${BASH_SOURCE}:${LINENO}): ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
+
+# default options
+merge_history=0 remove_trunk=0 force_upload=0
+
+usage() {
+    plain 'usage: %s [-fMT] [--] pkgbase...' "$argv0"
+    exit 1
+}
+
+# helper functions
+source /usr/share/makepkg/util/message.sh
+source /usr/share/makepkg/util/config.sh
+
+while getopts :fMT OPT; do
+    case $OPT in
+	f) force_upload=1 ;;
+	M) merge_history=1 ;;
+	T) remove_trunk=1 ;;
+	*) usage ;;
+    esac
+done
+shift $(( OPTIND - 1 ))
+OPTIND=1
+
+if (( ! $# )); then
+    usage
+fi
+
+# working directory
+tmp=$(mktemp -d) || exit
+
+# XXX: check for duplicates/invalid names
+if cd "$tmp"; then
+    for pkgbase in "$@"; do
+	# 0. copy for local operations
+	if ! asp checkout "$pkgbase" && cd "$pkgbase"; then
+	    error '%s: failed to retrieve trunk of pkgbase %s' "$argv0" "$pkgbase"
+	    exit 1
+	fi
+
+	# retrieve committer information from PACKAGER
+	source_makepkg_config
+
+	if [[ ! $PACKAGER ]]; then
+	    error '%s: packager not set' "$argv0"
+	    exit 1
+	fi
+	
+	# 1. upload package to AUR
+	#    - check if existing pkgbase
+	#    - check if merge of svn history results in conflicts
+	#    - submit package to AUR (with original or merged history)
+	#    - orphan package
+	if pkgbase_aur=$(package-query -Af '%b' "$pkgbase"); then
+	    if (( force_upload )); then
+		warning '%s: pushing to published pkgbase %s' "$argv0" "$pkgbase_aur"
+	    fi
+	else
+	    # package not published on AUR
+	    makepkg --printsrcinfo > .SRCINFO
+	    # add .SRCINFO to history
+	    git commmit .SRCINFO PKGBUILD --author="$PACKAGER" -m 'import from community'
+	    # set origin to AUR
+	    :
+	    # orphan package through SSH interface
+	    :
+	fi
+
+	# 2. remove package (all in pkgbase) from repositories
+	# shellcheck disable=2029
+	ssh repos.archlinux.org "/community/db-remove community \"$arch\" \"$pkgbase\""
+
+	# 3. remove package from SVN trunk
+	if (( remove_trunk )); then
+	    svn rm svn+ssh://svn-packages@repos.archlinux.org/srv/repos/svn-packages/svn/ "$pkgbase"
+	fi
+    done
+fi
+

@@ -48,11 +48,11 @@ setxkbmap -layout gb -variant extd
 #3 removable media
 udiskie -AFs &
 
-#4 screen locker
-xss-lock -l -- x-screenlocker &
-
-#5 multimedia keys
+#4 multimedia keys
 uacpid --opendisplay --tty &
+
+#5 screen locker
+xss-lock -l -- x-screenlocker &
 
 # window manager
 exec i3

@@ -1,26 +1,46 @@
 #!/bin/bash
-# /usr/share/doc/xss-lock/transfer-sleep-lock-i3lock.sh with i3lock-color and fast blur
-sigma=15
+readonly argv0=x-screensaver
+
 i3lock_options=(
-    --clock
-    --datecolor=ffffffaa
-    --timecolor=ffffffff
-    --indicator
-    --pass-media-keys
-    --radius 105
-    --ringcolor=ffffff55
-    --redraw-thread
+    --pointer=default
+    --show-failed-attempts
 )
 
-tmp=$(mktemp -d) || exit
-trap 'rm -rf "$tmp"' EXIT
+blur_image() {
+    ffmpeg -loglevel 0 -i - -vf "gblur=sigma=$1" -y "$2"
+}
 
-# take a screenshot (root window)
-if maim --hidecursor "$tmp"/in.png; then
-    # https://github.com/PandorasFox/i3lock-color/issues/129
-    if ffmpeg -loglevel 0 -i "$tmp"/in.png -vf "gblur=sigma=$sigma" "$tmp"/out.png; then
-        i3lock_options+=(--image="$tmp"/out.png)
+screenshot() {
+    maim --hidecursor
+}
+
+trap_exit() {
+    if [[ ! -o xtrace ]]; then
+	rm -rf "$img"
+    else
+	printf >&2 'temporary file at %s\n' "$img"
     fi
+}
+
+img=$(mktemp -t "$argv0".XXXXXX --suffix=.png) || exit
+trap 'trap_exit' EXIT
+
+unset sigma
+while getopts :s opt; do
+    case $opt in
+	s|+s)
+	    sigma=$OPTARG ;;
+	*)
+	    echo "usage: ${0##*/} [+-s} [--] ARGS..."
+	    exit 2
+    esac
+done
+shift $(( OPTIND - 1 ))
+OPTIND=1
+
+# create blurred image of root window
+if screenshot | blur_image "${sigma-10}" "$img"; then
+    i3lock_options+=(--image="$img")
 fi
 
 # We set a trap to kill the locker if we get killed, then start the locker and
@@ -28,7 +48,7 @@ fi
 # forks, so we use this polling only if we have a sleep lock to deal with.
 if [[ -e /dev/fd/${XSS_SLEEP_LOCK_FD:--1} ]]; then
     kill_i3lock() {
-        pkill -xu $EUID "$@" i3lock
+        pkill -xu "$EUID" "$@" i3lock
     }
     trap kill_i3lock TERM INT
 

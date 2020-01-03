@@ -1,0 +1,22 @@
+#!/bin/bash
+# card10_update - sync applications to card10
+dev_uuid=/dev/disk/by-uuid/4AA1-0000
+project=/home/$USER/card10/apps
+
+get_attribute() {
+    udisksctl info -b "$1" | awk -v attr="$2:" '$1 ~ attr {print $2}'
+}
+
+if [[ -z $(get_attribute $dev_uuid MountPoints) ]]; then
+    udisksctl mount -b "$dev_uuid" || exit
+fi
+
+label=$(get_attribute "$dev_uuid" IdLabel)
+
+if rsync -av --exclude='*~' --exclude='.*' "$project" /run/media/"$USER/$label"; then
+    sync && udisksctl unmount -b "$dev_uuid"
+    sync
+else
+    printf >&2 'error: failed to transfer files\n'
+    exit
+fi

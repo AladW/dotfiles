@@ -1,0 +1,54 @@
+source ~/.config/mutt/colors 
+source ~/.config/mutt/gpg.rc
+source ~/.config/mutt/vim-keys.rc
+
+# general
+set beep = no
+set beep_new = yes
+bind index,pager ] half-down
+bind index,pager [ half-up
+#bind index,pager § imap-fetch-mail
+
+# preview pane
+#set pager_index_lines = 20 # number of index lines to show
+#set pager_context = 3      # number of context lines to show
+#set pager_stop = yes       # don't go to next message automatically
+#set menu_scroll = yes      # scroll in menus
+#set tilde = yes            # show tildes like in vim
+#set markers = no           # no ugly plus signs
+
+# sidebar
+#set sidebar_visible
+set sidebar_format = "%B%?F? [%F]?%* %?N?%N/?%S"
+set sidebar_width = 20
+set mail_check_stats
+macro index,pager,compose B '<enter-command>toggle sidebar_visible<enter>' 'toggle sidebar'
+bind index,pager \CP sidebar-prev
+bind index,pager \CN sidebar-next
+bind index,pager \CO sidebar-open
+
+# threads
+set sort=threads
+set sort_aux=last-date-received
+
+# Maildir
+set mbox_type = Maildir
+set folder = ~/Mail
+set spoolfile = "+inbox"
+set header_cache=~/.cache/mutt
+
+# SMTP
+set realname='Alad Wenter'
+set from = alad@archlinux.org
+set sendmail='/usr/bin/msmtp'
+set record=+Sent
+set postponed='+Drafts'
+set trash=+Trash
+
+# GPG
+set fcc_clear = yes
+set pgp_use_gpg_agent = yes
+set crypt_autosign = yes
+set crypt_replyencrypt = yes
+
+# vim: ft=muttrc

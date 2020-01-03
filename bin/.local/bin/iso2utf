@@ -1,0 +1,8 @@
+#!/bin/sh
+tmp=$(mktemp)
+rm -rf '$tmp' EXIT
+
+for i in "$@"; do
+    iconv -t UTF-8 "$i" > "$tmp"
+    mv -v "$tmp" "$i"
+done
