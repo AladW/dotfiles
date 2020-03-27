@@ -40,6 +40,7 @@ bindsym $mod+Shift+q kill
 bindsym $mod+Tab exec --no-startup-id rofi -show window
 bindsym $mod+d exec --no-startup-id rofi -show drun
 bindsym $mod+Shift+d exec --no-startup-id rofi -show run
+#bindsym $mod+n exec --no-startup-id networkmanager_dmenu
 # There also is the (new) i3-dmenu-desktop which only displays applications
 # shipping a .desktop file. It is a wrapper around dmenu, so you need that
 # installed.
@@ -298,7 +299,7 @@ bindsym Print exec --no-startup-id xfce4-screenshooter
 bindsym Shift+Print exec --no-startup-id xfce4-screenshooter -r
 
 # others
-bindsym $mod+p exec --no-startup-id rofimoji -c
+bindsym $mod+p exec --no-startup-id rofimoji -p
 
 # dwm <clientclass>         <border> <bg> <text> <indicator>
 client.focused          #196584 #005577 #eeeeee #006891
@@ -307,4 +308,4 @@ client.unfocused        #373737 #222222 #bbbbbb #3B3B3B
 client.urgent           #7E1919 #700000 #eeeeee #8A0000
 
 # $i3-background
-exec_always --no-startup-id hsetroot -solid '#005577'
+#exec_always --no-startup-id hsetroot -center ~/Pictures/hardbass_school.png
