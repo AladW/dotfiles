@@ -1,0 +1,44 @@
+#!/bin/bash
+set -e
+tmp=$(mktemp -d)
+target=$1
+arch=$2
+svndir=$HOME/svn-community
+aurdir=$HOME/aur
+[[ -n $target ]] || exit 1
+[[ -n $arch ]] || exit 1
+[[ -d $svndir ]] || exit 2
+[[ -d $aurdir ]] || exit 2
+
+printf >&2 'removing package %s from repositories\n' "$target"
+kittypack -r community -a "$arch" "$target" # check existence
+ssh repos.archlinux.org "/community/db-remove community $arch $target"
+ssh repos.archlinux.org "/community/db-update"
+
+cd "$svndir"
+svn update "$target"
+mkdir "$tmp"/trunk
+cp -rv "$target"/trunk "$tmp"
+
+printf >&2 'removing package %s from svn\n' "$target"
+svn remove --force "$target"
+svn commit "$target" -m 'Dropping to AUR'
+
+printf >&2 'publishing package %s to AUR\n' "$target"
+cd "$tmp"
+git clone ssh://aur@aur.archlinux.org/"$target".git
+
+cd "$target"
+find . -not -path './.git*' -delete
+cp -v ../trunk/* .
+makepkg --printsrcinfo >.SRCINFO
+git add -A
+git commit -am 'Import from community'
+
+mv "$tmp/$target" "$aurdir"
+cd "$aurdir/$target"
+git push
+
+printf >&2 'orphaning AUR package %s\n' "$target"
+ssh aur@aur.archlinux.org disown "$target"
+rm -rf -- "$tmp"
