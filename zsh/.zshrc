@@ -142,5 +142,7 @@ export EDITOR=vim
 export VISUAL=vim
 
 # aurutils
-export AURDEST=/home/aur
-export AUR_REPO=alad
+export AUR_REPO=custom
+export AUR_DBROOT=/home/custompkgs
+export AUR_QUERY_PARALLEL=1
+export AUR_QUERY_PARALLEL_MAX=10

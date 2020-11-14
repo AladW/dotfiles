@@ -21,8 +21,6 @@ fi
 
 # environment variables
 export COLORTERM=truecolor
-export NO_AT_BRIDGE=1
-export GTK_OVERLAY_SCROLLING=0
 export XDG_CURRENT_DESKTOP=XFCE
 
 # environment variables (qt5)
@@ -32,32 +30,5 @@ elif [ -f /usr/lib/qt/plugins/platformthemes/libqt5ct.so ]; then
    export QT_QPA_PLATFORMTHEME=qt5ct
 fi
 
-# wallpaper
-hsetroot -cover ~/wallpapers/68000000000236160_1920x1080.jpg
-
-# autostart
-xdg=/etc/xdg/autostart
-dex -v "$xdg"/xfsettingsd.desktop
-dex -v "$xdg"/gnome-keyring-secrets.desktop
-dex -v "$xdg"/polkit-mate-authentication-agent-1.desktop
-
-#1 disable PC speaker
-xset -b
-
-#2 keyboard settings
 setxkbmap -layout gb -variant extd
-
-#3 removable media
-udiskie -AFs &
-
-#4 screen locker
-xss-lock -l -- x-screenlocker &
-
-#5 multimedia keys
-uacpid -ot &
-
-#6 color temperature
-redshift-gtk &
-
-# window manager
 exec i3

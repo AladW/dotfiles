@@ -12,7 +12,7 @@ XTerm.vt100.borderWidth:          0
 XTerm.vt100.charClass:            33:48,35-37:48,43:48,45-47:48,58:48,61:48,63-64:48,126:48
 XTerm.vt100.disallowedWindowOps:  20,21,SetXprop
 XTerm.vt100.faceName:             DejaVu Sans Mono
-XTerm.vt100.faceSize:             10
+XTerm.vt100.faceSize:             9.5
 XTerm.vt100.highlightSelection:   true
 XTerm.vt100.metaSendsEscape:      true
 
