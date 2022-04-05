@@ -1,0 +1,251 @@
+#!/bin/bash
+# aurutils implementation of https://xyne.dev/projects/pbget/
+argv0=pbget
+PS4='+(${BASH_SOURCE}:${LINENO}): ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
+startdir=$PWD
+ASPROOT=${ASPROOT:-${XDG_CACHE_HOME:-$HOME/.cache}/asp}
+ASPCACHE=${ASPCACHE:-$ASPROOT/cache}
+AUR_LOCATION=${AUR_LOCATION:-https://aur.archlinux.org}
+
+# default options
+aur=0 aur_only=0 pull=1 resolve_pkgbases=0 clear_cache=0 trunk=0 upgrades=0
+mode='export'
+
+# default arguments
+asp_args=() fetch_args=()
+
+usage() {
+    cat <<EOF
+usage: pbget [-h] [--arch <architecture>] [--aur] [--aur-only] [--clear]
+             [--config <path>] [--debug] [--dir <path>]
+             [--maintainer <maintainer>] [--no-pull] [--trunk]
+             [--resolve-pkgbases] [--testing] [--ttl TTL] [--upgradable]
+             [<pkgname> ...]
+
+Retrieve PKGBUILDs and local source files from ABS and the AUR for makepkg.
+
+positional arguments:
+  <pkgname>             The source packages to retrieve.
+
+options:
+  -h, --help            show this help message and exit
+  --arch <architecture>
+                        Set the desired package architecture.
+  --aur                 Search the AUR.
+  --aur-only            Only search the AUR.
+  --clear               Clear the ABS Git cache.
+  --config <path>       Pacman configuration file. Default: /etc/pacman.conf
+  --debug               Display debugging messages.
+  --dir <path>          Set the output directory. Default: .
+  --maintainer <maintainer>
+                        Retrieve all AUR packages from the given maintainer.
+                        (implies --aur, requires python3-aur, may be extended
+                        to support official packages later)
+  --no-pull             Fetch Git sources instead of pulling them.
+  --trunk               Retrieve PKGBUILDs from the ABS trunk, which may
+                        included PKGBUILDs in testing or staging.
+  --resolve-pkgbases    Attempt to resolve package bases. This requires
+                        additional remote queries to the archlinux.org server
+                        and should only be used when necessary.
+  --testing             Search the testing branches of the ABS tree.
+  --ttl TTL             The cache time-to-live, in minutes. Default: 5
+  --upgradable          Search for all upgradable packages.
+EOF
+}
+
+source /usr/share/makepkg/util/message.sh
+source /usr/share/makepkg/util/parseopts.sh
+source /usr/share/makepkg/util/util.sh
+
+if [[ ! -v NO_COLOR ]] && [[ ! -v AUR_DEBUG ]]; then
+    [[ -t 2 ]] && colorize
+fi
+
+# option parsing
+opt_short=h
+opt_long=('arch:' 'aur' 'aur-only' 'config:' 'debug' 'dir:' 'maintainer:'
+          'no-pull' 'trunk' 'resolve-pkgbases' 'testing' 'ttl:' 'upgradable')
+
+if ! parseopts "$opt_short" "${opt_long[@]}" -- "$@"; then
+    usage; exit 1
+fi
+set -- "${OPTRET[@]}"
+
+unset pacman_conf maintainer ttl prefix arch
+while true; do
+    case "$1" in
+        --arch)
+            shift; asp_args+=(-a "$1") ;;
+        --aur)
+            aur=1 ;;
+        --aur-only)
+            aur_only=1 ;;
+        --clear)
+            clear_cache=1 ;;
+        --config)
+            shift; pacman_conf=$1 ;;
+        --debug)
+            export AUR_DEBUG=1 ;;
+        --dir)
+            shift; startdir=$1 ;;
+        --maintainer)
+            shift; maintainer=$1 ;;
+        --no-pull)
+            pull=0 ;;
+        --trunk)
+            trunk=1 ;;
+        --resolve-pkgbases)
+            resolve_pkgbases=1 ;;
+        --testing)
+            prefix='testing/' ;;
+        --ttl)
+            shift; ttl=$1 ;;
+        --upgradable)
+            upgrades=1 ;;
+        -h|--help)
+            usage; exit 0 ;;
+        ## additional asp/aurutils options
+        --checkout)
+            mode=checkout ;;
+        --pull-view)
+        ;; # IDEA: with `asp checkout`, git diffs can be viewed with `aur-view(1)`
+            --results)
+        ;; # IDEA: results can be fed to `aur-build`            
+        --) shift; break ;;
+    esac
+    shift
+done
+
+# enable debug mode for current script
+(( AUR_DEBUG )) && set -o xtrace
+
+if (( ! $# )); then
+    plain 'nothing to do'
+    exit 0
+fi
+
+tmp=$(mktemp -d) || exit
+trap 'rm -rf "$tmp"' EXIT
+
+# XXX: asp(1) uses a fixed value of ttl=3600
+if [[ -v ttl ]]; then
+    printf >&2 'error: function not implemented\n'
+    exit 1
+fi
+
+# XXX: pbget --upgradable seems to be an AUR operation.
+# can be implemented with e.g. aur repo -u (local repo) or pacman -Qm | aur vercmp
+if (( upgrades )); then
+    printf >&2 'error: function not implemented\n'
+    exit 1
+fi
+
+# WARNING: break it, keep the pieces
+if (( clear_cache )); then
+    ASPCACHE=$(realpath -e -- "$ASPCACHE")
+    [[ -d $ASPCACHE ]] && rm -Irf "$ASPCACHE"
+fi
+
+if (( pull )); then
+    fetch_args+=(--sync=auto) # or --sync=rebase, --sync=reset
+fi
+
+cd "$startdir" || exit
+
+get_aur() {
+    local pkgbase pkg=$1 run_query=$2
+
+    if git ls-remote --exit-code "$AUR_LOCATION/$pkg"; then
+        aur fetch "${fetch_args[@]}" "$pkg"    
+
+    elif (( run_query )) && pkgbase=$(aur query -t info "$pkg" | jq -er '.results[].PackageBase'); then
+        aur fetch "${fetch_args[@]}" "$pkgbase"
+    else
+        return 1
+    fi
+}
+
+get_repos() {
+    # pkgbase is resolved implicitly by asp
+    local prefix pkg=$1 mode=$2 trunk=$3 testing=$4    
+
+    if asp update "$pkg"; then
+        # an `asp` checkout is a git repository, and can thus be used with aur-fetch!
+        # this directory is outside $startdir, so update it every time.
+        if [[ $mode == "checkout" ]]; then
+            # TODO: handle existing directories (that are not .git repositories)
+            if [[ -d $pkg/.git ]] && (( pull )); then
+                env -C "$pkg" git fetch
+                env -C "$pkg" git rebase --verbose
+            else
+                asp "${asp_args[@]}" checkout "$pkg"
+            fi
+
+        # asp export results in a flat directory with no history. The
+        # below is only for compatibility to pbget.
+        elif [[ $mode == "export" ]]; then
+            # set prefix to matching repository, or empty string if trunk=1
+            # it is assumed a package is contained in a single non-testing repository
+            if (( trunk )); then
+                prefix=
+            elif (( testing )); then
+                prefix=testing
+            else
+                prefix=$(asp list-repos "$pkg" | grep -Fxv testing)
+            fi
+
+            # asp bails out when the directory is existing
+            if (( pull )); then
+                env -C "$tmp" asp "${asp_args[@]}" export "$prefix/$pkg"
+                cp -r "$tmp"/* "$startdir"/
+
+            elif [[ ! -d $pkg ]]; then
+                asp "${asp_args[@]}" export "$prefix/$pkg"
+            fi
+        fi
+    else
+        return 1
+    fi
+}
+
+if [[ -v maintainer ]]; then
+    # Note: maintainers are either retrieved from AUR, or official repos, not both
+    if (( aur )) || (( aur_only )); then
+        mapfile -t targets < <(aur query -t search -b maintainer "$maintainer" | jq -r '.results[].PackageBase')
+    else        
+        mapfile -t targets < <(curl "https://archlinux.org/packages/search/json/?maintainer=$maintainer" | jq -er '.results[].pkgbase')
+    fi
+
+    if (( ${#targets[@]} )); then
+        set -- "${targets[@]}"
+        unset targets
+    else
+        error '%s: no packages for maintainer'
+        exit 1
+    fi
+fi
+
+# main loop
+# some pbget-style diagnostics could be added here
+for p in "$@"; do
+    if (( aur_only )); then
+        if ! get_aur "$p" "$resolve_pkgbases"; then
+            warning '%s: package not found' "$p"
+            continue
+        fi
+
+    elif (( aur )); then # AUR + repos
+        if get_repos "$p" "$mode" "$trunk" "$testing"; then
+            :
+        elif ! get_aur "$p" "$resolve_pkgbases"; then
+            warning '%s: package not found' "$p"
+            continue
+        fi
+
+    else # repos
+        if ! get_repos "$p" "$mode" "$trunk" "$testing"; then
+            warning '%s: package not found' "$p"
+            continue
+        fi
+    fi
+done

@@ -1,0 +1,152 @@
+#!/bin/bash -
+set -e
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# Simulate makepkg --syncdeps / --rmdeps as root
+argv0=makepkg-asroot
+
+# default options
+mode=build checkdepends=1
+
+# default arguments
+makepkg_args=() pacman_args=() pactrans_args=()
+
+# Allow to drop permissions for commands as needed (#907)
+as_user() {
+    #global build_user
+    local USER HOME SHELL
+
+    if [[ $UID == 0 ]] && [[ -v build_user ]]; then
+        # runuser --pty messes up the terminal with AUR_DEBUG set, use setpriv(1)
+        # and replicate the runuser(1) behavior for setting the environment
+        { IFS= read -r USER
+          IFS= read -r HOME
+          IFS= read -r SHELL
+        } < <(getent passwd "$build_user" | awk -F: '{printf("%s\n%s\n%s\n", $1, $6, $7); }')
+
+        setpriv --reuid "$build_user" --regid "$build_user" --init-groups \
+                env USER="$USER" HOME="$HOME" LOGNAME="$USER" SHELL="$SHELL" "$@"
+    else
+        env "$@"
+    fi
+}
+
+source /usr/share/makepkg/util/parseopts.sh
+source /usr/share/makepkg/util/message.sh
+source /usr/share/makepkg/util/util.sh
+
+# TODO: do this check after --nocolor
+if [[ ! -v NO_COLOR ]] && [[ ! -v AUR_DEBUG ]]; then
+    [[ -t 2 ]] && colorize
+fi
+
+# option parsing
+opt_short='rsU:' # special options
+opt_short+='AcdefghiLmop:RSVC' # options passed on to makepkg
+opt_long=('rmdeps' 'nocheck' 'check' 'user:' 'resolve-conflicts:' 'syncdeps')
+opt_long+=('ignorearch' 'clean' 'config:' 'nodeps' 'noextract' 'verifysource'
+           'force' 'geninteg' 'skipinteg' 'skipchecksums' 'skippgpcheck' 'help'
+           'holdver' 'install' 'log' 'nocolor' 'nobuild' 'source' 'version'
+           'cleanbuild' 'allsource' 'noarchive' 'noprepare' 'sign' '--nosign'
+           'key:' 'noconfirm' 'needed' 'asdeps' 'noprogressbar' 'packagelist'
+           'printsrcinfo')
+
+if ! parseopts "$opt_short" "${opt_long[@]}" -- "$@"; then
+    usage
+fi
+set -- "${OPTRET[@]}"
+
+# TODO: wrap all options above
+unset build_user
+while true; do
+    case "$1" in
+        --rmdeps)
+            rmdeps=1 ;;
+        --nocheck|--no-check)
+            checkdepends=0 ;;
+        -s|--syncdeps)
+            syncdeps=1 ;;
+        -U|--user)
+            shift; build_user=$1 ;;
+        --resolve-conflicts)
+            # prompt, none, all, provided, depends, provided-depends
+            shift; pactrans_args+=(--resolve-conflicts "$1") ;;
+        --) shift; break ;;
+    esac
+    shift
+done
+
+# check that an unprivileged user is specified
+build_user=${build_user-$SUDO_USER}
+if (( ! $(id -u "$build_user") )); then
+    printf >&2 '%s: unprivileged user required\n' "$argv0"
+    exit 2
+fi
+
+# select which dependencies are handled
+dep_fields=('depends' 'makedepends')
+(( checkdepends )) && dep_fields+=('checkdepends')
+
+# Retrieve dependencies as regular user (sources PKGBUILD)
+get_depends_as_user() {
+    as_user makepkg --printsrcinfo | pacini - "$@" | awk -F' = ' '{print $2}'
+    return "${PIPESTATUS[0]}"
+}
+
+get_transaction() {
+    #shellcheck disable=SC2016
+    env LANG=C pactrans --install "${pactrans_args[@]}" --print-only "$@" \
+        awk '{ if ($0 ~ /^removing/ || $0 ~ /^installing/) {print} else {print > "/dev/stderr"}; }'
+    return "${PIPESTATUS[0]}"
+}
+
+case $mode in
+    build|nobuild) # syncdeps/rmdeps also apply to --no-build (download agents e.g.)
+        # retrieve dependencies which are missing on the host
+        mapfile -t targets < <(get_depends_as_user "${dep_fields[@]}")
+        wait "$!"
+
+        mapfile -t filtered_targets < <(pacman -T "${pacman_args[@]}" "${targets[@]}")
+        wait "$!"
+
+        # remove and install packages such that dependencies are fulfilled (this will
+        # depend on the --resolve-conflicts option)
+        remove_args=() install_args=()
+
+        if (( ${filtered_targets[@]} )); then
+            while read -r type package _; do
+                if [[ $type == "removing" ]]; then
+                    remove_args+=(--remove "${package##local/}")
+
+                elif [[ $type == "installing" ]]; then
+                    install_args+=(--install "$package")
+                fi
+            done < <(
+                get_transaction "${filtered_targets[@]}" 2>/dev/null
+            )
+            wait "$!"
+
+            if (( syncdeps )) && (( ${#remove_args[@]} + ${#install_args[@]} )); then
+                pactrans "${pactrans_args[@]}" --as-deps "${remove_args[@]}" "${install_args[@]}"
+            fi
+        fi
+
+        # Now we can build the package
+        # XXX: assumes user has access to the PKGBUILD directory
+        # cf. http://allanmcrae.com/2015/01/replacing-makepkg-asroot/
+        as_user makepkg "${makepkg_args[@]}"
+
+        if (( install_pkg )); then
+            mapfile -t pkgs < <(as_user makepkg --packagelist)
+            # XXX: add --asdeps if specified
+            pactrans "${pactrans_args[@]}" --file "${pkgs[@]}"
+        fi
+
+        # If successful, undo the steps we've done on dependency resolution, i.e.
+        # perform the transaction in reverse order
+        if (( rmdeps )) && (( ${#remove_args[@]} + ${#install_args[@]} )); then
+            pactrans "${pactrans_args[@]}" --as-deps "${remove_args[@]}" "${install_args[@]}"
+        fi
+        ;;
+    printsrcinfo|packagelist|allsource|source)
+        as_user makepkg "${makepkg_args[@]}" ;;
+esac
