@@ -1,12 +1,20 @@
 #!/bin/bash
 # Remove unused build files in aur-sync cache
-readonly XDG_CACHE_HOME=${XDG_CACHE_HOME:-$HOME/.cache}
-readonly AURDEST=${AURDEST:-$XDG_CACHE_HOME/aurutils/sync}
+XDG_CACHE_HOME=${XDG_CACHE_HOME:-$HOME/.cache}
+AURDEST=${AURDEST:-$XDG_CACHE_HOME/aurutils/sync}
 
 # Assumes build files were retrieved through git(1)
-find "$AURDEST" -name .git -execdir git clean -xf \; >&2
+find "$AURDEST" -name .git -execdir git clean -xf \;
 
 # Print directories which do not contain a PKGBUILD file
 for d in "$AURDEST"/*; do
-  [[ -f $d/PKGBUILD ]] || printf '%s\n' "$d"
+    [[ -f $d/PKGBUILD ]] || printf '%s\n' "$d"
 done
+
+# Remove stale ninja.build
+rm -rfv "$AURDEST"/ninja-$USER-*
+
+# Print files which are present in both cache and local repo
+while read -r repo_name; do
+    pacsift --cache 2>/dev/null $(pacman -Slq "$repo_name" | xargs printf '--name %s\n') | sed 's|file://||g'
+done < <(aur repo --repo-list)

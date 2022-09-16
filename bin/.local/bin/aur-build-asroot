@@ -1,0 +1,180 @@
+#!/bin/bash
+[[ -v AUR_DEBUG ]] && set -o xtrace
+set -o errexit
+argv0=build-asroot
+startdir=$PWD
+PS4='+(${BASH_SOURCE}:${LINENO}): ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
+
+# Default options
+makepkg_args=(-L) pactrans_args=() repo_add_args=() checkdepends=1
+
+# Allow to drop permissions for commands as needed (#907)
+as_user() {
+    local USER HOME SHELL
+
+    if [[ $UID == 0 ]] && [[ -v build_user ]]; then
+        # runuser --pty messes up the terminal with AUR_DEBUG set, use setpriv(1)
+        # and replicate the runuser(1) behavior for setting the environment
+        { IFS= read -r USER
+          IFS= read -r HOME
+          IFS= read -r SHELL
+        } < <(getent passwd "$build_user" | awk -F: '{printf("%s\n%s\n%s\n", $1, $6, $7); }')
+
+        setpriv --reuid "$build_user" --regid "$build_user" --init-groups \
+                env USER="$USER" HOME="$HOME" LOGNAME="$USER" SHELL="$SHELL" "$@"
+    else
+        env "$@"
+    fi
+}
+
+
+# Save transaction so that it can easily be undone later. `pactrans` ignores
+# `provides` or groups, so these are resolved with `pacman -Sp` first.  This
+# implies no provider selection; default targets are always taken.
+# See: https://github.com/andrewgregory/pacutils/issues/63
+get_transaction() {
+    if (( $# )); then
+        mapfile -t pkgnames < <(pacman -Sp "$@" --print-format '%r/%n')
+        wait "$!" || return
+
+        env LANG=C pacinstall --print-only "${pkgnames[@]}" |
+            awk '$1 == "removing" || $1 == "installing"'
+        return "${PIPESTATUS[0]}"
+    fi
+}
+
+install_depends() {
+    #global remove_args install_args
+    if (( ${#remove_args[@]} + ${#install_args[@]} )); then
+        pacinstall "${pactrans_args[@]}" --as-deps "${install_args[@]}" --remove "${remove_args[@]}"
+    fi
+}
+
+remove_depends() {
+    #global remove_args install_args
+    if (( ${#remove_args[@]} + ${#install_args[@]} )); then
+        pacremove "${pactrans_args[@]}" "${install_args[@]##*/}" --install "${remove_args[@]}"
+    fi
+}
+
+# Simple option parsing
+unset queue build_user db_name
+
+orig_argv=("$@")
+while getopts :a:U:d:fRnC OPT; do
+    case $OPT in
+        a) queue=$OPTARG ;;
+        d) db_name=$OPTARG ;;
+        U) build_user=$OPTARG ;;
+        C) makepkg_args+=(--nocheck); checkdepends=0 ;;
+        f) makepkg_args+=(-f) ;;
+        n) makepkg_args+=(--noconfirm) ;;
+        R) repo_add_args+=(-R) ;;
+        *) printf >&2 '%s: invalid option\n' "$argv0"
+           exit 1;;
+    esac
+done
+shift $(( OPTIND - 1 ))
+
+if [[ ! -v db_name ]] || [[ -z $db_name ]]; then
+    printf >&2 '%s: repository must be specified\n' "$argv0"
+    exit 1
+fi
+
+if (( $(id -u "$build_user") == 0 )); then
+    printf '%s: build user is privileged\n' "$argv0"
+    exit 2
+fi
+
+# Elevate permissions
+if (( EUID != 0 )); then
+    exec ${AUR_PACMAN_AUTH:-sudo} -- "${BASH_SOURCE[0]}" "${orig_argv[@]}"
+fi
+
+db_path=$(as_user aur repo -d "$db_name" --path)
+db_root=$(dirname "$db_path")
+
+# Types of dependencies that will be installed before the build.
+deptypes=(depends makedepends)
+(( checkdepends )) && deptypes+=(checkdepends)
+
+# If a queue file is specified, use it for reading targets. Otherwise, default
+# to the current directory.
+if [[ -v queue ]]; then
+    exec {fd}< "$queue"
+else
+    exec {fd}< <(printf '\n')
+fi
+
+# A trap is defined here so that when build-asroot is interrupted, any installed
+# dependencies are removed. This behavior matches makepkg --rmdeps.
+unset remove_args install_args
+trap 'remove_depends' EXIT
+
+while IFS= read -ru "$fd" path; do
+    cd "$startdir"
+    cd "$path"
+
+    # Retrieve dependencies as build user with makepkg --printsrcinfo. Alternatively,
+    # dependencies can be retrieved directly from .SRCINFO, in cases where it
+    # matches the PKGBUILD exactly (AUR packages with no local changes).
+    depends=()
+    while IFS= read -r value; do
+        depends+=("$value")
+    done < <(
+        #pacini .SRCINFO "${deptypes[@]}" | awk -F' = ' '{print $2}'
+        as_user aur build--pkglist --srcinfo | pacini - "${deptypes[@]}" | awk -F' = ' '{print $2}')
+
+    # Check which dependencies are missing on the host.
+    mapfile -t depends_missing < <(pacman -T "${depends[@]}")
+
+    # Precomputing the transaction allows to undo it later in reverse order.
+    # In particular, dependencies are installed and removed in a single transaction.
+    # Semantics are defined by the `--resolve-conflicts` and `--resolve-replacements`
+    # options for `pactrans`.
+    while read -r type package _; do
+        case $type in
+            removing)
+                remove_args+=("${package##local/}") ;;
+            installing)
+                install_args+=("$package") ;;
+        esac
+    done < <(get_transaction "${depends_missing[@]}")
+    wait "$!"
+
+    install_depends
+
+    # Privileges are now dropped to a regular user to build the package. It is
+    # assumed that this user has at least read access to the PKGBUILD. If the
+    # PKGBUILD has a `pkgver()` function, write access is also needed.
+    makepkg_ret=0
+    as_user PKGDEST="$db_root" makepkg "${makepkg_args[@]}" || makepkg_ret=$?
+
+    # A direct invocation of `makepkg` has a wide range of exit codes (see
+    # /usr/share/makepkg/util/error.sh). 13 signifies that a package in `PKGDEST`
+    # is already available. Note that `makepkg --sign` will not create a new
+    # signature in such a case.
+    case $makepkg_ret in
+        13) continue ;; # $E_ALREADY_BUILT
+         0) ;; # success
+         *) exit "$makepkg_ret" ;; # general error
+    esac
+
+    # Perform dependency transaction in reverse order.
+    # Note: the install reason for removed packages is not preserved.
+    remove_depends
+    unset install_args remove_deps
+
+    # Retrieve paths to built packages. To avoid linting the PKGBUILD a second
+    # time, `aur-build--pkglist` is preferred over `makepkg --packagelist`.
+    mapfile -t pkglist < <(as_user PKGDEST="$db_root" aur build--pkglist)
+    wait "$!"
+
+    # update local repository
+    as_user env -C "$db_root" repo-add "${repo_add_args[@]}" "$db_path" "${pkglist[@]}"
+
+    # update host and pacman database
+    aur build--sync "$db_name"
+done
+
+exec {fd}<&-

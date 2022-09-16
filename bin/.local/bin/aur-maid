@@ -1,0 +1,54 @@
+#!/bin/bash
+[[ -v AUR_DEBUG ]] && set -o xtrace
+set -o errexit
+XDG_CACHE_HOME=${XDG_CACHE_HOME:-$HOME/.cache}
+XDG_DATA_HOME=${XDG_DATA_HOME:-$HOME/.local/share}
+export AUR_PAGER=view-delta
+export AUR_QUERY_RPC=https://server.moson.rocks/rpc
+export AUR_SYNC_USE_NINJA=0
+argv0=maid
+
+# default arguments
+build_args=(-Rn) sync_args=(--format=log)
+
+usage() {
+    echo "usage: $argv0 [-d ARG] [-ufC] [--] ARGS..."
+    exit 2
+}
+
+checkdepends=1 use_mirror=0
+unset db_name sync_args
+
+while getopts :d:eufCM OPT; do
+    case $OPT in
+        d) db_name=$OPTARG ;;
+        u) sync_args+=(-u) ;;
+        f) build_args+=(-f); sync_args+=(-f --no-ver-argv) ;;
+        C) build_args+=(-C); sync_args+=(--no-check) ;;
+        e) sync_args+=(--continue) ;;
+        M) use_mirror=1 ;;
+        *) usage ;;
+    esac
+done
+shift $(( OPTIND - 1 ))
+OPTIND=1
+
+if (( use_mirror )); then
+    export AURDEST=$XDG_CACHE_HOME/aurutils/sync-mirror
+    export AUR_VIEW_DB=$XDG_DATA_HOME/aurutils/view-mirror
+    export AUR_FETCH_USE_MIRROR=1
+fi
+
+# set up scratch space
+queue=$(mktemp)
+if [[ ! -v AUR_DEBUG ]]; then
+    trap 'rm -rf "$queue"' EXIT
+fi
+
+# retrieve and inspect sources
+aur sync -d "$db_name" "${sync_args[@]}" "$@" --no-build >"$queue"
+
+# build packages in dependency order
+if [[ -s $queue ]]; then
+    aur build-asroot -d "$db_name" -a "$queue" -U "$USER" "${build_args[@]}"
+fi
