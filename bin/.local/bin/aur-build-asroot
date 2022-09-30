@@ -58,16 +58,17 @@ remove_depends() {
 }
 
 # Simple option parsing
-unset queue build_user db_name
-
+unset queue build_user db_name db_root
 orig_argv=("$@")
-while getopts :a:U:d:fRnC OPT; do
+
+while getopts :a:U:d:r:fRnC OPT; do
     case $OPT in
         a) queue=$OPTARG ;;
         d) db_name=$OPTARG ;;
+        r) db_root=$OPTARG ;;
         U) build_user=$OPTARG ;;
         C) makepkg_args+=(--nocheck); checkdepends=0 ;;
-        f) makepkg_args+=(-f) ;;
+        f) makepkg_args+=(--force) ;;
         n) makepkg_args+=(--noconfirm) ;;
         R) repo_add_args+=(-R) ;;
         *) printf >&2 '%s: invalid option\n' "$argv0"
@@ -77,11 +78,12 @@ done
 shift $(( OPTIND - 1 ))
 
 if [[ ! -v db_name ]] || [[ -z $db_name ]]; then
-    printf >&2 '%s: repository must be specified\n' "$argv0"
+    printf >&2 '%s: repository name must be specified\n' "$argv0"
     exit 1
-fi
-
-if (( $(id -u "$build_user") == 0 )); then
+elif [[ ! -v db_root ]] || [[ ! -d $db_root ]]; then
+    printf >&2 '%s: repository root must point to a directory\n' "$argv0"
+    exit 1
+elif (( $(id -u "$build_user") == 0 )); then
     printf '%s: build user is privileged\n' "$argv0"
     exit 2
 fi
@@ -91,8 +93,8 @@ if (( EUID != 0 )); then
     exec ${AUR_PACMAN_AUTH:-sudo} -- "${BASH_SOURCE[0]}" "${orig_argv[@]}"
 fi
 
-db_path=$(as_user aur repo -d "$db_name" --path)
-db_root=$(dirname "$db_path")
+# Resolve symbolic link to local repository
+db_path=$(realpath -e -- "$db_root/$db_name".db)
 
 # Types of dependencies that will be installed before the build.
 deptypes=(depends makedepends)
@@ -122,8 +124,9 @@ while IFS= read -ru "$fd" path; do
     while IFS= read -r value; do
         depends+=("$value")
     done < <(
-        #pacini .SRCINFO "${deptypes[@]}" | awk -F' = ' '{print $2}'
-        as_user aur build--pkglist --srcinfo | pacini - "${deptypes[@]}" | awk -F' = ' '{print $2}')
+        pacini .SRCINFO "${deptypes[@]}" | awk -F' = ' '{print $2}'
+        (( ! PIPESTATUS[0] )) )
+    wait "$!"
 
     # Check which dependencies are missing on the host.
     mapfile -t depends_missing < <(pacman -T "${depends[@]}")
