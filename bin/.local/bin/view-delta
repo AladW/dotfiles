@@ -14,7 +14,6 @@ pkgbases=("${pkgbases[@]%/}")
 
 # Show diffs in 2 panes
 if [[ -f ${diffs[0]} ]]; then
-    #cat "${diffs[@]}" | diff-so-fancy | less --tabs=4 -FR >&2
     cat "${diffs[@]}" | delta --diff-so-fancy --paging=always --line-numbers --navigate
 
     # Remove diffs from remaining targets (new or unchanged dirs)

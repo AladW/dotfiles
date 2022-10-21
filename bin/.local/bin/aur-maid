@@ -9,29 +9,52 @@ export AUR_SYNC_USE_NINJA=0
 argv0=maid
 
 # default arguments
-build_args=(-Rn) sync_args=(--format=log)
+build_args=(-R) sync_args=(--format=log)
+
+# default options
+checkdepends=1 use_mirror=0
 
 usage() {
-    echo "usage: $argv0 [-d ARG] [-ufC] [--] ARGS..."
+    echo "usage: $argv0 [-d ARG] [-ufCeM] [--] ARGS..."
     exit 2
 }
 
-checkdepends=1 use_mirror=0
-unset db_name sync_args
+source /usr/share/makepkg/util/message.sh
+source /usr/share/makepkg/util/parseopts.sh
 
-while getopts :d:eufCM OPT; do
-    case $OPT in
-        d) db_name=$OPTARG ;;
-        u) sync_args+=(-u) ;;
-        f) build_args+=(-f); sync_args+=(-f --no-ver-argv) ;;
-        C) build_args+=(-C); sync_args+=(--no-check) ;;
-        e) sync_args+=(--continue) ;;
-        M) use_mirror=1 ;;
-        *) usage ;;
+# option parsing
+opt_short='d:ufCeMn'
+opt_long=('repo:' 'upgrades' 'force' 'no-check' 'nocheck' 'continue' 'mirror'
+          'noconfirm' 'no-confirm' 'ignore:')
+
+if ! parseopts "$opt_short" "${opt_long[@]}" -- "$@"; then
+    usage
+fi
+set -- "${OPTRET[@]}"
+
+unset repo_args sync_args
+while true; do
+    case $1 in
+        -d|--repo)
+            shift; repo_args+=(-d "$1") ;;
+        -f|--force)
+            build_args+=(-f); sync_args+=(-f --no-ver-argv) ;;
+        -C|--nocheck|--no-check)
+            build_args+=(-C); sync_args+=(--no-check) ;;
+        -n|--noconfirm|--no-confirm)
+            build_args+=(-n) ;;
+        -e|--continue)
+            sync_args+=(--continue) ;;
+        -u|--upgrades)
+            sync_args+=(-u) ;;
+        --ignore)
+            shift; sync_args+=(--ignore "$1") ;;
+        -M|--mirror)
+            use_mirror=1 ;;
+        --) shift; break ;;
     esac
+    shift
 done
-shift $(( OPTIND - 1 ))
-OPTIND=1
 
 if (( use_mirror )); then
     export AURDEST=$XDG_CACHE_HOME/aurutils/sync-mirror
@@ -45,10 +68,19 @@ if [[ ! -v AUR_DEBUG ]]; then
     trap 'rm -rf "$queue"' EXIT
 fi
 
+# retrieve local repository information
+{ IFS=: read -r _ db_name
+  IFS=: read -r _ db_root
+  IFS=: read -r _ db_path
+} < <(aur repo "${repo_args[@]}" --status)
+wait "$!"
+
 # retrieve and inspect sources
-aur sync -d "$db_name" "${sync_args[@]}" "$@" --no-build >"$queue"
+aur sync -d "$db_name" --root "$db_root" "${sync_args[@]}" --no-build "$@" \
+    --exclude ':!*.SRCINFO' --exclude ':!*.gitignore' --prefix >"$queue"
 
 # build packages in dependency order
 if [[ -s $queue ]]; then
-    aur build-asroot -d "$db_name" -a "$queue" -U "$USER" "${build_args[@]}"
+    build_args+=(-d "$db_name" -r "$db_root" -a "$queue" -U "$USER")
+    aur build-asroot "${build_args[@]}"
 fi
