@@ -20,13 +20,13 @@ as_user() {
           IFS= read -r SHELL
         } < <(getent passwd "$build_user" | awk -F: '{printf("%s\n%s\n%s\n", $1, $6, $7); }')
 
-        setpriv --reuid "$build_user" --regid "$build_user" --init-groups \
+        # avoid `sudo` calls in build scripts from escalating privileges
+        setpriv --no-new-privs --reuid "$build_user" --regid "$build_user" --init-groups \
                 env USER="$USER" HOME="$HOME" LOGNAME="$USER" SHELL="$SHELL" "$@"
     else
         env "$@"
     fi
 }
-
 
 # Save transaction so that it can easily be undone later. `pactrans` ignores
 # `provides` or groups, so these are resolved with `pacman -Sp` first.  This
@@ -69,7 +69,7 @@ while getopts :a:U:d:r:fRnC OPT; do
         U) build_user=$OPTARG ;;
         C) makepkg_args+=(--nocheck); checkdepends=0 ;;
         f) makepkg_args+=(--force) ;;
-        n) makepkg_args+=(--noconfirm) ;;
+        n) pactrans_args+=(--no-confirm) ;;
         R) repo_add_args+=(-R) ;;
         *) printf >&2 '%s: invalid option\n' "$argv0"
            exit 1;;
@@ -83,14 +83,18 @@ if [[ ! -v db_name ]] || [[ -z $db_name ]]; then
 elif [[ ! -v db_root ]] || [[ ! -d $db_root ]]; then
     printf >&2 '%s: repository root must point to a directory\n' "$argv0"
     exit 1
+elif [[ ! -v build_user ]]; then
+    printf >&2 '%s: build user not specified\n' "$argv0"
+    exit 1
 elif (( $(id -u "$build_user") == 0 )); then
-    printf '%s: build user is privileged\n' "$argv0"
+    printf >&2 '%s: build user is privileged\n' "$argv0"
     exit 2
 fi
 
-# Elevate permissions
+# XXX: only done so that `aur-build-asroot` can be resolved with `aur`,
+# without placing it in the global AUR_EXEC_PATH
 if (( EUID != 0 )); then
-    exec ${AUR_PACMAN_AUTH:-sudo} -- "${BASH_SOURCE[0]}" "${orig_argv[@]}"
+    exec pkexec --keep-cwd "${BASH_SOURCE[0]}" "${orig_argv[@]}"
 fi
 
 # Resolve symbolic link to local repository
@@ -126,7 +130,11 @@ while IFS= read -ru "$fd" path; do
     done < <(
         pacini .SRCINFO "${deptypes[@]}" | awk -F' = ' '{print $2}'
         (( ! PIPESTATUS[0] )) )
-    wait "$!"
+
+    if ! wait "$!"; then
+        printf >&2 '%s: failed to parse .SRCINFO\n' "$argv0"
+        exit 2
+    fi
 
     # Check which dependencies are missing on the host.
     mapfile -t depends_missing < <(pacman -T "${depends[@]}")
